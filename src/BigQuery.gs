@@ -44,34 +44,58 @@ function buscarViajanteCache(matricula) {
 }
 
 /**
- * Consulta o BigQuery via API avançada do GAS.
+ * Consulta o BigQuery com as tabelas reais de produção.
+ *
+ * Tabelas:
+ *   maga-bigdata.kirk.assignee               — identidade, e-mail, hierarquia
+ *   maga-bigdata.mlpap.mag_v_funcionarios_ativos — dados de RH (cargo, filial, CC…)
+ *
+ * JOIN: assignee.CUSTOM1 = CAST(mag_v_funcionarios_ativos.ID AS STRING)
+ * Hierarquia: assignee.superior (INTEGER) → outro assignee.id (gestor N1)
+ *             gestor_N1.superior → gestor N2
  */
 function consultarColaboradorBQ(matricula) {
   const cfg = getConfig();
+  const tA  = cfg.BQ_TABLE_ASSIGNEE;      // 'maga-bigdata.kirk.assignee'
+  const tF  = cfg.BQ_TABLE_FUNCIONARIOS;  // 'maga-bigdata.mlpap.mag_v_funcionarios_ativos'
+
   const query = `
-    WITH hierarquia AS (
-      SELECT matricula, nome, email, cargo, nivel_hierarquico,
-             filial, centro_custo, status_ativo, matricula_gestor_direto, email_gestor
-      FROM \`${cfg.BQ_PROJECT_ID}.${cfg.BQ_DATASET}.${cfg.BQ_TABLE}\`
-      WHERE status_ativo = TRUE
-    )
-    SELECT
-      v.matricula, v.nome, v.email, v.cargo, v.nivel_hierarquico,
-      v.filial, v.centro_custo,
-      g1.email  AS aprovador_n1_email,
-      g1.nome   AS aprovador_n1_nome,
-      g1.nivel_hierarquico AS aprovador_n1_nivel,
-      g2.email  AS aprovador_n2_email,
-      g2.nome   AS aprovador_n2_nome
-    FROM hierarquia v
-    LEFT JOIN hierarquia g1 ON v.matricula_gestor_direto = g1.matricula
-    LEFT JOIN hierarquia g2 ON g1.matricula_gestor_direto = g2.matricula
-    WHERE v.matricula = '${matricula}'
+    SELECT DISTINCT
+      CAST(t2.ID AS STRING)                          AS matricula,
+      t2.NOME                                        AS nome,
+      t2.CARGO                                       AS cargo,
+      t2.FILIAL                                      AS filial,
+      t2.CENTRO_CUSTO                                AS centro_custo,
+      t2.COD_CENTRO_CUSTO                            AS cod_centro_custo,
+      t2.CATEGORIA                                   AS categoria,
+      t2.COD_CATEGORIA                               AS cod_categoria,
+      t2.EMPRESA                                     AS empresa,
+      t2.SITUACAO                                    AS situacao,
+      t2.DATA_ADMISSAO                               AS data_admissao,
+      t1.email                                       AS email,
+      t1.user_name                                   AS user_name,
+      t1.custom2                                     AS custom2,
+      t1.superior                                    AS superior_id,
+      CONCAT(g1.first_name, ' ', g1.last_name)       AS aprovador_n1_nome,
+      g1.email                                       AS aprovador_n1_email,
+      g1.id                                          AS aprovador_n1_id,
+      CONCAT(g2.first_name, ' ', g2.last_name)       AS aprovador_n2_nome,
+      g2.email                                       AS aprovador_n2_email
+    FROM \`${tA}\` AS t1
+    INNER JOIN \`${tF}\` AS t2
+      ON t1.CUSTOM1 = CAST(t2.ID AS STRING)
+    LEFT JOIN \`${tA}\` AS g1
+      ON t1.superior = g1.id AND g1.active = TRUE
+    LEFT JOIN \`${tA}\` AS g2
+      ON g1.superior = g2.id AND g2.active = TRUE
+    WHERE t1.CUSTOM1 = '${matricula}'
+      AND t2.SITUACAO = 'Ativo'
+      AND t1.active = TRUE
     LIMIT 1
   `;
 
   try {
-    const request  = { query, useLegacySql: false, timeoutMs: 5000 };
+    const request  = { query, useLegacySql: false, timeoutMs: 8000 };
     const response = BigQuery.Jobs.query(cfg.BQ_PROJECT_ID, request);
 
     if (!response.rows || response.rows.length === 0) return null;
@@ -94,7 +118,6 @@ function extrairCadeiaAprovacao(matricula) {
   return {
     n1_email: viajante.aprovador_n1_email || null,
     n1_nome:  viajante.aprovador_n1_nome  || null,
-    n1_nivel: viajante.aprovador_n1_nivel || null,
     n2_email: viajante.aprovador_n2_email || null,
     n2_nome:  viajante.aprovador_n2_nome  || null,
   };
@@ -103,23 +126,44 @@ function extrairCadeiaAprovacao(matricula) {
 /**
  * Grava ou atualiza viajante na aba Viajantes (cache).
  * Calcula categorização automática antes de gravar.
+ *
+ * Mapeamento dos campos reais do BQ:
+ *   dadosBQ.cargo          → cargo do colaborador (ex: "Diretor", "Analista")
+ *   dadosBQ.cod_categoria  → código de categoria salarial
+ *   dadosBQ.superior_id    → id (INTEGER) do gestor direto no assignee
+ *   dadosBQ.aprovador_n1_* → dados pré-resolvidos pelo JOIN no BQ
+ *   dadosBQ.aprovador_n2_* → dois níveis acima
  */
 function criarOuAtualizarViajante(dadosBQ) {
   const cfg   = getConfig();
   const sheet = SpreadsheetApp.openById(cfg.SHEET_ID).getSheetByName('Viajantes');
   const agora = new Date();
 
-  // Categorização inicial baseada apenas na hierarquia (sem laudos ainda)
-  const nivel = parseInt(dadosBQ.nivel_hierarquico || 1);
-  const catHosp  = nivel >= 4 ? 'Individual'    : 'Compartilhado';
-  const motivoH  = nivel >= 4 ? 'R1 - Cargo Diretor ou superior' : 'Cargo padrão';
-  const catVeic  = nivel >= 4 ? 'Individual'    : 'Compartilhado';
-  const motivoV  = nivel >= 4 ? 'V1 - Cargo Diretor ou superior' : 'Cargo padrão';
+  // Regra R1: cargo de alto nível → hospedagem individual desde o início
+  const cargosExecutivos = ['Diretor', 'VP', 'Vice-Presidente', 'CEO', 'CFO', 'CTO', 'COO', 'CSO', 'CHRO'];
+  const ehExecutivo = cargosExecutivos.some(c =>
+    (dadosBQ.cargo || '').toUpperCase().includes(c.toUpperCase())
+  );
+  const catHosp  = ehExecutivo ? 'Individual'    : 'Compartilhado';
+  const motivoH  = ehExecutivo ? 'R1 - Cargo Executivo (Diretor ou superior)' : 'Cargo padrão';
+  const catVeic  = ehExecutivo ? 'Individual'    : 'Compartilhado';
+  const motivoV  = ehExecutivo ? 'V1 - Cargo Executivo (Diretor ou superior)' : 'Cargo padrão';
 
   const nova = [
-    dadosBQ.matricula, dadosBQ.nome, dadosBQ.cargo,
-    nivel, dadosBQ.filial, dadosBQ.centro_custo, dadosBQ.email,
+    dadosBQ.matricula,
+    dadosBQ.nome,
+    dadosBQ.cargo,
+    dadosBQ.cod_categoria  || '',
+    dadosBQ.filial         || '',
+    dadosBQ.centro_custo   || '',
+    dadosBQ.cod_centro_custo || '',
+    dadosBQ.empresa        || '',
+    dadosBQ.email          || '',
+    dadosBQ.user_name      || '',
     dadosBQ.aprovador_n1_email || '',
+    dadosBQ.aprovador_n1_nome  || '',
+    dadosBQ.aprovador_n2_email || '',
+    dadosBQ.aprovador_n2_nome  || '',
     // Necessidades especiais — iniciam vazias
     false, '', '', '', '',   // sono
     false, '', '',           // mobilidade
@@ -129,8 +173,13 @@ function criarOuAtualizarViajante(dadosBQ) {
   ];
 
   sheet.appendRow(nova);
-  return { ...dadosBQ, categoria_hospedagem: catHosp, categoria_veiculo: catVeic,
-           motivo_categoria_hosp: motivoH, motivo_categoria_veic: motivoV };
+  return {
+    ...dadosBQ,
+    categoria_hospedagem:      catHosp,
+    categoria_veiculo:         catVeic,
+    motivo_categoria_hosp:     motivoH,
+    motivo_categoria_veic:     motivoV
+  };
 }
 
 // ── Utilitário ───────────────────────────────────────────────

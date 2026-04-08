@@ -1,5 +1,5 @@
 // ============================================================
-// Aprovacoes.gs — Cadeia hierárquica N1/N2/RH + tokens
+// Aprovacoes.gs — Cadeia hierárquica N1/N2 + tokens  (RH descartado no MVP — Decisão D15)
 // ============================================================
 
 /**

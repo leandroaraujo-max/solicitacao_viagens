@@ -78,11 +78,9 @@ function submeterSolicitacao(payload) {
   // 8. Dispara e-mails para as agências
   dispararEmailAgencias(reqID, viajante, payload, classificacao);
 
-  // 9. Se há exceção de saúde e laudo, notifica RH antes de avançar
-  if (payload.quarto_excecao_saude) {
-    notificarRHExcecaoSaude(reqID, viajante, payload);
-    atualizarStatusSolicitacao(reqID, 'Aguardando Aprovação RH');
-  }
+  // 9. [MVP] Exceção de saúde: laudo já foi salvo no Drive (Drive.gs).
+  //    Validação pelo RH descartada (D15) — fluxo segue normal sem etapa RH.
+  //    Em V2: reabilitar notificarRHExcecaoSaude() e status 'Aguardando Aprovação RH'.
 
   return { reqID, status: 'Aguardando Cotação', classificacao, antecedenciaDias };
 }

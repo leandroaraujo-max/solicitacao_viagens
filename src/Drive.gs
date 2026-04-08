@@ -48,8 +48,8 @@ function salvarExcecaoQuartoIndividual(payload) {
     });
   }
 
-  // 4. Notifica RH
-  notificarRHExcecaoSaude(payload.reqID, { matricula: payload.matricula, nome: payload.nomeViajante }, payload);
+  // 4. [MVP] Notificação ao RH desabilitada (D15) — laudo armazenado no Drive com acesso restrito.
+  // V2: notificarRHExcecaoSaude(payload.reqID, { matricula: payload.matricula, nome: payload.nomeViajante }, payload);
 
   return { sucesso: true, linkLaudo };
 }

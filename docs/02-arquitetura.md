@@ -111,9 +111,10 @@ src/
 ```javascript
 // Exemplo de acesso seguro via PropertiesService
 const props = PropertiesService.getScriptProperties();
-const SHEET_ID    = props.getProperty('SHEET_ID');
-const PASTA_LAUDOS_ID = props.getProperty('PASTA_LAUDOS_ID');
-const EMAIL_RH    = props.getProperty('EMAIL_RH');
+const SHEET_ID               = props.getProperty('SHEET_ID');
+const PASTA_LAUDOS_ID        = props.getProperty('PASTA_LAUDOS_ID');
+const BQ_TABLE_ASSIGNEE      = props.getProperty('BQ_TABLE_ASSIGNEE');      // 'maga-bigdata.kirk.assignee'
+const BQ_TABLE_FUNCIONARIOS  = props.getProperty('BQ_TABLE_FUNCIONARIOS'); // 'maga-bigdata.mlpap.mag_v_funcionarios_ativos'
 ```
 
 ---

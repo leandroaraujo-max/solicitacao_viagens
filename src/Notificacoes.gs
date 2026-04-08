@@ -147,30 +147,17 @@ function enviarEmailAprovacaoN2(reqID, req, emailN1, agenciaEscolhidaN1) {
 
 /**
  * Notifica o RH sobre exceção de quarto individual com link do laudo.
+ *
+ * *** MVP: DESABILITADO ***
+ * A validação pelo RH foi descartada do MVP (Decisão D15).
+ * O laudo é armazenado no Drive com acesso restrito; o fluxo de aprovação
+ * segue direto para o gestor N1 sem envio de e-mail ao RH.
+ * Reabilitar em V2, configurando EMAIL_RH nas Script Properties.
  */
-function notificarRHExcecaoSaude(reqID, viajante, solicitacao) {
-  const cfg = getConfig();
-  GmailApp.sendEmail(cfg.EMAIL_RH,
-    `[Viagens] Solicitação de Exceção — Quarto Individual | MAT-${viajante.matricula}`,
-    '', {
-      htmlBody: `
-        <div style="font-family:sans-serif;max-width:600px">
-          <p>Uma solicitação de exceção de quarto individual foi registrada.</p>
-          <table style="width:100%;border-collapse:collapse">
-            <tr><td><b>Matrícula:</b></td><td>${viajante.matricula}</td></tr>
-            <tr><td><b>Nome:</b></td>     <td>${viajante.nome}</td></tr>
-            <tr><td><b>Tipo de condição:</b></td><td>${solicitacao.excecao_motivo || '-'}</td></tr>
-            <tr><td><b>CID informado:</b></td>   <td>${solicitacao.excecao_cid || '-'}</td></tr>
-            <tr><td><b>Protocolo:</b></td>        <td>${reqID}</td></tr>
-          </table>
-          <p><a href="${solicitacao.excecao_laudo_link}">📄 Acessar Laudo Médico (PDF)</a></p>
-          <p><small>Acesse o Portal de Viagens para aprovar ou reprovar esta exceção.</small></p>
-        </div>`,
-      name: 'Sistema de Viagens Magalu',
-      replyTo: cfg.EMAIL_VIAGENS,
-    });
+function notificarRHExcecaoSaude(reqID, viajante, solicitacao) { // eslint-disable-line no-unused-vars
+  // MVP: sem envio de e-mail ao RH — função retorna silenciosamente
+  Logger.log(`[MVP] notificarRHExcecaoSaude ignorada para reqID=${reqID} (D15)`);
 }
-
 /**
  * Notifica o viajante/operador que a solicitação foi aprovada.
  */

@@ -20,7 +20,7 @@ A categoria é atribuída automaticamente pelo GAS com base no perfil do viajant
 | **R1** | Hierarquia | Cargo = Diretor, VP, C-Level | BQ |
 | **R2** | Distúrbio do sono | Laudo médico aprovado pelo RH + CID válido | Sheet (excecao_status_rh = Aprovado) |
 | **R3** | Mobilidade reduzida | Necessidade de acessibilidade documentada | Cadastro + laudo aprovado |
-| **R4** | Distância percorrida | Trecho > `DISTANCIA_KM_LIMITE` km (a definir — sugestão: 800 km) | Calculado na submissão |
+| **R4** | Distância percorrida | ~~Regra removida do MVP~~ — ver Seção 3: carro automático | — |
 | **R5** | Outro CID aprovado | Qualquer condição médica homologada pelo RH | Sheet |
 
 **Resultado possível:**
@@ -39,6 +39,7 @@ motivo_categoria:     "R1 - Cargo Diretor" | "R2 - Distúrbio do Sono Aprovado" 
 | **V2** | Horário incompatível | Voos com diferença > 3h entre viajantes do mesmo grupo |
 | **V3** | Destinos distintos | Mesmo CC, mesma cidade, locais de reunião diferentes |
 | **V4** | Sem match disponível | Nenhum outro viajante elegível no período |
+| **V5** | Carro automático | Trecho > `DISTANCIA_KM_LIMITE` km (padrão: **250 km**) — habilita solicitação de câmbio automático |
 
 ---
 
@@ -115,7 +116,7 @@ Uma solicitação B é compatível com A quando **todos** os critérios forem at
 
 | Parâmetro | Valor Sugerido | Responsável pela Definição |
 |---|---|---|
-| `DISTANCIA_KM_LIMITE` | 800 km | Setor de Viagens |
+| `DISTANCIA_KM_LIMITE` | **250 km** | Setor de Viagens _(habilita carro de câmbio automático — não quarto individual)_ |
 | Tolerância horário veículo | 3 horas | Setor de Viagens |
 | Validade máxima do laudo médico | 12 meses | RH |
 | SLA cotação agências | 24h | Setor de Viagens |

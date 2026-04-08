@@ -8,16 +8,17 @@
 function getConfig() {
   const props = PropertiesService.getScriptProperties();
   return {
-    SHEET_ID:          props.getProperty('SHEET_ID'),
-    PASTA_LAUDOS_ID:   props.getProperty('PASTA_LAUDOS_ID'),
-    PASTA_VOUCHERS_ID: props.getProperty('PASTA_VOUCHERS_ID'),
-    EMAIL_RH:          props.getProperty('EMAIL_RH'),
-    EMAIL_VIAGENS:     props.getProperty('EMAIL_VIAGENS'),
-    BQ_PROJECT_ID:     props.getProperty('BQ_PROJECT_ID'),
-    BQ_DATASET:        props.getProperty('BQ_DATASET'),
-    BQ_TABLE:          props.getProperty('BQ_TABLE'),
-    WEBAPP_URL:        props.getProperty('WEBAPP_URL'),
-    DISTANCIA_KM_LIMITE: parseInt(props.getProperty('DISTANCIA_KM_LIMITE') || '800'),
+    SHEET_ID:               props.getProperty('SHEET_ID'),
+    PASTA_LAUDOS_ID:        props.getProperty('PASTA_LAUDOS_ID'),
+    PASTA_VOUCHERS_ID:      props.getProperty('PASTA_VOUCHERS_ID'),
+    EMAIL_VIAGENS:          props.getProperty('EMAIL_VIAGENS'),
+    BQ_PROJECT_ID:          props.getProperty('BQ_PROJECT_ID'),
+    // Tabelas BQ reais confirmadas pelo time de dados
+    BQ_TABLE_ASSIGNEE:      props.getProperty('BQ_TABLE_ASSIGNEE'),      // 'maga-bigdata.kirk.assignee'
+    BQ_TABLE_FUNCIONARIOS:  props.getProperty('BQ_TABLE_FUNCIONARIOS'),  // 'maga-bigdata.mlpap.mag_v_funcionarios_ativos'
+    WEBAPP_URL:             props.getProperty('WEBAPP_URL'),
+    // Distância mínima para habilitar CARRO AUTOMÁTICO (câmbio automático) — não quarto individual
+    DISTANCIA_KM_LIMITE: parseInt(props.getProperty('DISTANCIA_KM_LIMITE') || '250'),
     SLA_COTACAO_H:     parseInt(props.getProperty('SLA_COTACAO_H') || '24'),
     SLA_N1_COMUM_H:    parseInt(props.getProperty('SLA_N1_COMUM_H') || '24'),
     SLA_N1_EMERG_H:    parseInt(props.getProperty('SLA_N1_EMERG_H') || '4'),
