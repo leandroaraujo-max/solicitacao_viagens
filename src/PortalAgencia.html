@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Portal do Prestador — Viagens Magalu</title>
+  <?!= include('Estilos'); ?>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-inner">
+    <div class="logo"><span class="logo-icon">📋</span><span>Portal do Prestador</span></div>
+    <span class="badge-magalu">Viagens Magalu</span>
+  </div>
+</header>
+
+<main class="container">
+
+  <!-- Cabeçalho da solicitação (read-only) -->
+  <div class="card">
+    <h2 class="card-title">Solicitação — <span id="lblReqID"><?= reqID ?></span></h2>
+    <p class="field-hint">Agência: <strong><?= agencia ?></strong></p>
+
+    <div id="dadosSolicitacao" class="perfil-grid">
+      <span><label>Carregando...</label></span>
+    </div>
+
+    <div id="alertaStatus" class="alert hidden"></div>
+  </div>
+
+  <!-- Formulário de cotação (exibido conforme tipo de serviço) -->
+  <div id="formCotacao" class="card hidden">
+    <h2 class="card-title">Inserir Cotação</h2>
+
+    <!-- Aéreo -->
+    <div id="secaoAereo" class="card card-inner hidden">
+      <h3>✈ Cotação Aéreo</h3>
+      <div class="grid-2">
+        <div class="field-group">
+          <label>Companhia Aérea <span class="req">*</span></label>
+          <select id="aeroCia">
+            <option value="">Selecione...</option>
+            <option>LATAM</option><option>GOL</option><option>Azul</option>
+            <option>Passaredo</option><option>Outro</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label>Número do Voo <span class="req">*</span></label>
+          <input type="text" id="aeroVoo" placeholder="Ex: LA3041" maxlength="8" />
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="field-group">
+          <label>Horário de Saída <span class="req">*</span></label>
+          <input type="datetime-local" id="aeroSaida" />
+        </div>
+        <div class="field-group">
+          <label>Horário de Chegada <span class="req">*</span></label>
+          <input type="datetime-local" id="aeroChegada" />
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="field-group">
+          <label>Aeroporto Origem (IATA) <span class="req">*</span></label>
+          <input type="text" id="aeroOrigem" placeholder="Ex: CGH" maxlength="3" style="text-transform:uppercase" />
+        </div>
+        <div class="field-group">
+          <label>Aeroporto Destino (IATA) <span class="req">*</span></label>
+          <input type="text" id="aeroDestino" placeholder="Ex: POA" maxlength="3" style="text-transform:uppercase" />
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="field-group">
+          <label>Classe</label>
+          <select id="aeroClasse">
+            <option>Econômica</option><option>Executiva</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label>Bagagem Incluída?</label>
+          <div class="radio-group">
+            <label class="radio-opt"><input type="radio" name="aeroBagagem" value="true">  Sim</label>
+            <label class="radio-opt"><input type="radio" name="aeroBagagem" value="false" checked> Não</label>
+          </div>
+        </div>
+      </div>
+      <div class="field-group">
+        <label>Possui conexão?</label>
+        <div class="radio-group">
+          <label class="radio-opt"><input type="radio" name="aeroConexao" value="true"  onchange="toggleConexao(true)">  Sim</label>
+          <label class="radio-opt"><input type="radio" name="aeroConexao" value="false" onchange="toggleConexao(false)" checked> Não</label>
+        </div>
+        <input type="text" id="aeroEscala" class="hidden" placeholder="Aeroporto de escala (IATA)" maxlength="3" style="margin-top:6px;text-transform:uppercase" />
+      </div>
+      <div class="grid-2">
+        <div class="field-group">
+          <label>Valor Total (R$) <span class="req">*</span></label>
+          <input type="number" id="aeroValor" step="0.01" min="0" placeholder="0,00" />
+        </div>
+        <div class="field-group">
+          <label>Validade da Cotação <span class="req">*</span></label>
+          <input type="datetime-local" id="aeroValidade" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Hospedagem -->
+    <div id="secaoHospedagem" class="card card-inner hidden">
+      <h3>🏨 Cotação Hospedagem</h3>
+      <div class="grid-2">
+        <div class="field-group">
+          <label>Nome do Hotel <span class="req">*</span></label>
+          <input type="text" id="hotelNome" placeholder="Nome do estabelecimento" />
+        </div>
+        <div class="field-group">
+          <label>Categoria</label>
+          <select id="hotelCategoria">
+            <option>3 ★★★</option><option>4 ★★★★</option><option>5 ★★★★★</option>
+          </select>
+        </div>
+      </div>
+      <div class="field-group">
+        <label>Endereço / Bairro</label>
+        <input type="text" id="hotelEndereco" placeholder="Endereço ou bairro próximo ao destino" />
+      </div>
+      <div class="grid-2">
+        <div class="field-group">
+          <label>Check-in <span class="req">*</span></label>
+          <input type="date" id="hotelCheckin" />
+        </div>
+        <div class="field-group">
+          <label>Check-out <span class="req">*</span></label>
+          <input type="date" id="hotelCheckout" onchange="calcularDiarias()" />
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="field-group">
+          <label>Tipo de Quarto</label>
+          <div id="tipoQuartoDisplay" class="info-box">Carregando...</div>
+        </div>
+        <div class="field-group">
+          <label>Regime de Alimentação</label>
+          <select id="hotelRegime">
+            <option>Sem café da manhã</option>
+            <option>Café da manhã incluso</option>
+            <option>Meia pensão</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid-3">
+        <div class="field-group">
+          <label>Valor da Diária (R$) <span class="req">*</span></label>
+          <input type="number" id="hotelDiaria" step="0.01" min="0" onchange="calcularDiarias()" placeholder="0,00" />
+        </div>
+        <div class="field-group">
+          <label>Nº de Diárias</label>
+          <input type="number" id="hotelNDiarias" readonly style="background:#f5f5f5" />
+        </div>
+        <div class="field-group">
+          <label>Total (R$)</label>
+          <input type="number" id="hotelTotal" readonly style="background:#f5f5f5;font-weight:700" />
+        </div>
+      </div>
+      <div class="field-group">
+        <label>Cancelamento gratuito até</label>
+        <input type="date" id="hotelCancelamento" />
+      </div>
+      <div class="field-group">
+        <label>Link do Hotel (site oficial ou booking)</label>
+        <input type="url" id="hotelLink" placeholder="https://..." />
+      </div>
+    </div>
+
+    <!-- Carro -->
+    <div id="secaoCarro" class="card card-inner hidden">
+      <h3>🚗 Cotação Aluguel de Carro</h3>
+      <div class="grid-2">
+        <div class="field-group">
+          <label>Locadora <span class="req">*</span></label>
+          <select id="carroLocadora">
+            <option value="">Selecione...</option>
+            <option>Localiza</option><option>Movida</option><option>Unidas</option>
+            <option>Hertz</option><option>Outro</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label>Categoria do Veículo</label>
+          <select id="carroCategoria">
+            <option>Econômico</option><option>Intermediário</option>
+            <option>SUV</option><option>Executivo</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="field-group">
+          <label>Retirada <span class="req">*</span></label>
+          <input type="datetime-local" id="carroRetirada" />
+        </div>
+        <div class="field-group">
+          <label>Devolução <span class="req">*</span></label>
+          <input type="datetime-local" id="carroDevolucao" />
+        </div>
+      </div>
+      <div class="field-group">
+        <label>Local de Retirada</label>
+        <input type="text" id="carroLocal" placeholder="Ex: Aeroporto Salgado Filho — Balcão T1" />
+      </div>
+      <div class="grid-2">
+        <div class="field-group">
+          <label>Seguro incluso?</label>
+          <div class="radio-group">
+            <label class="radio-opt"><input type="radio" name="carroSeguro" value="true">  Sim</label>
+            <label class="radio-opt"><input type="radio" name="carroSeguro" value="false" checked> Não</label>
+          </div>
+        </div>
+        <div class="field-group">
+          <label>Valor Total (R$) <span class="req">*</span></label>
+          <input type="number" id="carroValor" step="0.01" min="0" placeholder="0,00" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Observações gerais -->
+    <div class="field-group">
+      <label for="cotacaoObs">Observações gerais</label>
+      <textarea id="cotacaoObs" rows="3" placeholder="Informações adicionais relevantes..."></textarea>
+    </div>
+
+    <div class="alert alert-info">
+      ⚠ Após o envio, a cotação não poderá ser alterada. Correções devem ser solicitadas diretamente ao setor de viagens.
+    </div>
+
+    <button class="btn-primary" id="btnEnviarCotacao" onclick="enviarCotacao()">
+      📤 Enviar Cotação
+    </button>
+  </div>
+
+  <!-- Upload de voucher (exibido após aprovação) -->
+  <div id="secaoVoucher" class="card hidden">
+    <h2 class="card-title">Upload de Voucher</h2>
+    <p>A viagem foi <strong style="color:#2e7d32">aprovada</strong>. Faça o upload dos vouchers em PDF.</p>
+    <div id="camposVoucher"></div>
+    <button class="btn-primary" id="btnEnviarVoucher" onclick="enviarVouchers()">
+      📤 Enviar Vouchers
+    </button>
+  </div>
+
+  <!-- Confirmação -->
+  <div id="step-confirmacao" class="card hidden">
+    <div class="sucesso-box">
+      <div class="sucesso-icon">✅</div>
+      <h2 id="msgConfirmacao">Cotação enviada com sucesso!</h2>
+      <p>O setor de viagens foi notificado.</p>
+    </div>
+  </div>
+
+</main>
+
+<script>
+const REQ_ID  = '<?= reqID ?>';
+const AGENCIA = '<?= agencia ?>';
+let solicitacao = null;
+
+// ── Inicialização ─────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => carregarSolicitacao());
+
+function carregarSolicitacao() {
+  google.script.run
+    .withSuccessHandler(r => renderizarSolicitacao(r.dados))
+    .withFailureHandler(e => mostrarAlerta(e.message, 'erro'))
+    .doPost_proxy({ acao: 'carregarSolicitacaoAgencia', reqID: REQ_ID, agencia: AGENCIA });
+}
+
+function renderizarSolicitacao(req) {
+  solicitacao = req;
+  const el    = document.getElementById('dadosSolicitacao');
+  el.innerHTML = `
+    <span><label>Viajante</label><strong>${req.nome_viajante}</strong></span>
+    <span><label>Destino</label>${req.destino_cidade} / ${req.destino_estado}</span>
+    <span><label>Ida</label>${formatData(req.data_ida)}</span>
+    <span><label>Volta</label>${formatData(req.data_volta)}</span>
+    <span><label>Serviços</label>${Array.isArray(req.tipo_servico) ? req.tipo_servico.join(', ') : req.tipo_servico}</span>
+    <span><label>🏨 Quarto</label><strong>${req.quarto_tipo_solicitado}</strong></span>
+    <span><label>🚗 Veículo</label><strong>${req.veiculo_tipo_solicitado}</strong></span>`;
+
+  if (req.status === 'Aprovada / Aguardando Voucher') {
+    document.getElementById('secaoVoucher').classList.remove('hidden');
+    montarCamposVoucher(req);
+  } else if (['Aguardando Cotação', 'Cotação Parcial'].includes(req.status)) {
+    document.getElementById('formCotacao').classList.remove('hidden');
+    exibirSecoesServico(req);
+  } else {
+    mostrarAlerta(`Status atual: ${req.status}. Nenhuma ação disponível no momento.`, 'info');
+  }
+
+  document.getElementById('tipoQuartoDisplay').textContent = req.quarto_tipo_solicitado;
+}
+
+function exibirSecoesServico(req) {
+  const tipos = Array.isArray(req.tipo_servico) ? req.tipo_servico : [req.tipo_servico];
+  if (tipos.includes('Aereo'))      document.getElementById('secaoAereo').classList.remove('hidden');
+  if (tipos.includes('Hospedagem')) document.getElementById('secaoHospedagem').classList.remove('hidden');
+  if (tipos.includes('Carro'))      document.getElementById('secaoCarro').classList.remove('hidden');
+}
+
+// ── Cálculos ──────────────────────────────────────────────────
+function calcularDiarias() {
+  const ci   = new Date(document.getElementById('hotelCheckin').value);
+  const co   = new Date(document.getElementById('hotelCheckout').value);
+  const dias = Math.round((co - ci) / 86400000);
+  const val  = parseFloat(document.getElementById('hotelDiaria').value) || 0;
+  if (dias > 0) {
+    document.getElementById('hotelNDiarias').value = dias;
+    document.getElementById('hotelTotal').value    = (dias * val).toFixed(2);
+  }
+}
+
+function toggleConexao(tem) {
+  document.getElementById('aeroEscala').classList.toggle('hidden', !tem);
+}
+
+// ── Envio de cotação ──────────────────────────────────────────
+function enviarCotacao() {
+  const payload = {
+    acao:    'submeterCotacaoAgencia',
+    reqID:   REQ_ID,
+    agencia: AGENCIA,
+    aereo: {
+      cia:        document.getElementById('aeroCia')?.value,
+      voo:        document.getElementById('aeroVoo')?.value,
+      saida:      document.getElementById('aeroSaida')?.value,
+      chegada:    document.getElementById('aeroChegada')?.value,
+      origem:     document.getElementById('aeroOrigem')?.value,
+      destino:    document.getElementById('aeroDestino')?.value,
+      classe:     document.getElementById('aeroClasse')?.value,
+      bagagem:    document.querySelector('[name="aeroBagagem"]:checked')?.value === 'true',
+      conexao:    document.querySelector('[name="aeroConexao"]:checked')?.value === 'true',
+      escala:     document.getElementById('aeroEscala')?.value,
+      valor:      parseFloat(document.getElementById('aeroValor')?.value),
+      validade:   document.getElementById('aeroValidade')?.value,
+    },
+    hospedagem: {
+      nome:        document.getElementById('hotelNome')?.value,
+      categoria:   document.getElementById('hotelCategoria')?.value,
+      endereco:    document.getElementById('hotelEndereco')?.value,
+      checkin:     document.getElementById('hotelCheckin')?.value,
+      checkout:    document.getElementById('hotelCheckout')?.value,
+      regime:      document.getElementById('hotelRegime')?.value,
+      diaria:      parseFloat(document.getElementById('hotelDiaria')?.value),
+      nDiarias:    parseInt(document.getElementById('hotelNDiarias')?.value),
+      total:       parseFloat(document.getElementById('hotelTotal')?.value),
+      cancelamento: document.getElementById('hotelCancelamento')?.value,
+      link:        document.getElementById('hotelLink')?.value,
+    },
+    carro: {
+      locadora:   document.getElementById('carroLocadora')?.value,
+      categoria:  document.getElementById('carroCategoria')?.value,
+      retirada:   document.getElementById('carroRetirada')?.value,
+      devolucao:  document.getElementById('carroDevolucao')?.value,
+      local:      document.getElementById('carroLocal')?.value,
+      seguro:     document.querySelector('[name="carroSeguro"]:checked')?.value === 'true',
+      valor:      parseFloat(document.getElementById('carroValor')?.value),
+    },
+    observacoes: document.getElementById('cotacaoObs')?.value,
+  };
+
+  document.getElementById('btnEnviarCotacao').disabled = true;
+  document.getElementById('btnEnviarCotacao').textContent = 'Enviando...';
+
+  google.script.run
+    .withSuccessHandler(() => {
+      document.getElementById('formCotacao').classList.add('hidden');
+      document.getElementById('step-confirmacao').classList.remove('hidden');
+      document.getElementById('msgConfirmacao').textContent = '✅ Cotação enviada com sucesso!';
+    })
+    .withFailureHandler(e => {
+      mostrarAlerta(e.message, 'erro');
+      document.getElementById('btnEnviarCotacao').disabled = false;
+      document.getElementById('btnEnviarCotacao').textContent = '📤 Enviar Cotação';
+    })
+    .doPost_proxy(payload);
+}
+
+// ── Upload de vouchers ────────────────────────────────────────
+const vouchersBase64 = {};
+
+function montarCamposVoucher(req) {
+  const tipos  = Array.isArray(req.tipo_servico) ? req.tipo_servico : [req.tipo_servico];
+  const icones = { Aereo: '✈', Hospedagem: '🏨', Carro: '🚗' };
+  const el     = document.getElementById('camposVoucher');
+  el.innerHTML = tipos.map(t => `
+    <div class="field-group">
+      <label>${icones[t] || ''} Voucher ${t} (PDF, máx 5MB) <span class="req">*</span></label>
+      <input type="file" accept=".pdf" onchange="carregarVoucher(this, '${t}')" />
+      <span id="voucherStatus_${t}" class="field-hint"></span>
+    </div>`).join('');
+}
+
+function carregarVoucher(input, tipo) {
+  const file   = input.files[0];
+  const status = document.getElementById(`voucherStatus_${tipo}`);
+  if (!file || file.type !== 'application/pdf') { status.textContent = '❌ PDF inválido'; return; }
+  if (file.size > 5 * 1024 * 1024) { status.textContent = '❌ Arquivo maior que 5 MB'; return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    vouchersBase64[tipo] = e.target.result.split(',')[1];
+    status.textContent   = `✅ ${file.name}`;
+    status.style.color   = '#2e7d32';
+  };
+  reader.readAsDataURL(file);
+}
+
+function enviarVouchers() {
+  const tipos = Object.keys(vouchersBase64);
+  if (!tipos.length) return alert('Selecione ao menos um voucher.');
+
+  tipos.forEach(tipo => {
+    google.script.run
+      .withSuccessHandler(() => {
+        if (Object.keys(vouchersBase64).every(t => vouchersBase64[t])) {
+          document.getElementById('secaoVoucher').classList.add('hidden');
+          document.getElementById('step-confirmacao').classList.remove('hidden');
+          document.getElementById('msgConfirmacao').textContent = '✅ Vouchers enviados!';
+        }
+      })
+      .withFailureHandler(e => mostrarAlerta(e.message, 'erro'))
+      .doPost_proxy({ acao: 'uploadVoucher', reqID: REQ_ID, tipoServico: tipo, voucherBase64: vouchersBase64[tipo] });
+  });
+}
+
+// ── Utilitários UI ────────────────────────────────────────────
+function mostrarAlerta(msg, tipo) {
+  const el = document.getElementById('alertaStatus');
+  el.textContent = msg;
+  el.className   = `alert ${tipo === 'erro' ? 'alert-erro' : 'alert-info'}`;
+  el.classList.remove('hidden');
+}
+
+function formatData(str) {
+  if (!str) return '-';
+  const d = new Date(str);
+  return d.toLocaleDateString('pt-BR');
+}
+</script>
+</body>
+</html>

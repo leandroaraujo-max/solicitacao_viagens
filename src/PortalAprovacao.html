@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Confirmação — Viagens Magalu</title>
+  <?!= include('Estilos'); ?>
+</head>
+<body>
+<header class="header">
+  <div class="header-inner">
+    <div class="logo"><span class="logo-icon">✈</span><span>Portal de Viagens</span></div>
+    <span class="badge-magalu">Magalu</span>
+  </div>
+</header>
+<main class="container" style="max-width:540px">
+  <div class="card" style="text-align:center;padding:48px 32px">
+
+    <? if (acao === 'AprovaTastur' || acao === 'AprovaKontrip') { ?>
+      <div class="sucesso-icon" style="font-size:64px">✅</div>
+      <h2 style="color:#2e7d32;margin:16px 0 8px">Aprovação registrada!</h2>
+      <p>Sua decisão foi processada com sucesso.</p>
+      <p>A agência selecionada será notificada para emitir os vouchers.</p>
+
+    <? } else if (acao === 'Reprova') { ?>
+      <div class="sucesso-icon" style="font-size:64px">❌</div>
+      <h2 style="color:#c62828;margin:16px 0 8px">Reprovação registrada</h2>
+      <p>A solicitação foi reprovada. O solicitante e o setor de viagens foram notificados.</p>
+
+    <? } else { ?>
+      <div class="sucesso-icon" style="font-size:64px">✔</div>
+      <h2 style="margin:16px 0 8px">Ação concluída</h2>
+      <p>Sua resposta foi registrada com sucesso.</p>
+    <? } ?>
+
+    <p style="color:#999;font-size:13px;margin-top:32px">
+      Este link era de uso único e não pode ser reutilizado.<br>
+      Em caso de dúvidas, contate o setor de viagens.
+    </p>
+  </div>
+</main>
+</body>
+</html>

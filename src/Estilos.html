@@ -1,0 +1,216 @@
+<style>
+/* ── Reset & Base ─────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --blue:    #0086FF;
+  --yellow:  #FFCE00;
+  --bg:      #F5F5F5;
+  --text:    #333333;
+  --green:   #2e7d32;
+  --red:     #c62828;
+  --border:  #E0E0E0;
+  --shadow:  0 2px 8px rgba(0,0,0,0.08);
+}
+
+body {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+/* ── Header ──────────────────────────────────────────────── */
+.header {
+  background: var(--blue);
+  padding: 0 24px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+  position: sticky; top: 0; z-index: 100;
+}
+.header-inner {
+  max-width: 860px; margin: auto;
+  display: flex; align-items: center; justify-content: space-between;
+  height: 60px;
+}
+.logo {
+  display: flex; align-items: center; gap: 10px;
+  color: #fff; font-size: 18px; font-weight: 700;
+}
+.logo-icon { font-size: 22px; }
+.badge-magalu {
+  background: var(--yellow); color: var(--text);
+  padding: 4px 12px; border-radius: 20px;
+  font-size: 12px; font-weight: 700; letter-spacing: 0.5px;
+}
+
+/* ── Container ───────────────────────────────────────────── */
+.container {
+  max-width: 860px; margin: 32px auto;
+  padding: 0 16px;
+  display: flex; flex-direction: column; gap: 20px;
+}
+
+/* ── Card ────────────────────────────────────────────────── */
+.card {
+  background: #fff;
+  border-radius: 10px;
+  padding: 28px;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
+}
+.card-inner {
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 20px;
+  margin-top: 16px;
+}
+.card-title {
+  font-size: 18px; font-weight: 700;
+  color: var(--blue); margin-bottom: 20px;
+  padding-bottom: 12px; border-bottom: 2px solid var(--border);
+}
+
+/* ── Formulário ──────────────────────────────────────────── */
+.field-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+.field-group label { font-weight: 600; font-size: 14px; color: #555; }
+.field-hint { font-size: 12px; color: #888; }
+.req { color: var(--red); }
+
+input[type="text"],
+input[type="number"],
+input[type="date"],
+input[type="datetime-local"],
+input[type="url"],
+input[type="email"],
+input[type="file"],
+select,
+textarea {
+  border: 1.5px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 15px;
+  font-family: inherit;
+  color: var(--text);
+  background: #fff;
+  transition: border-color 0.2s;
+  width: 100%;
+}
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(0,134,255,0.12);
+}
+input[readonly] { background: #f5f5f5; color: #888; cursor: default; }
+
+.input-row { display: flex; gap: 8px; }
+.input-row input { flex: 1; }
+
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+
+/* ── Radio e Checkbox ────────────────────────────────────── */
+.radio-group, .check-group { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 4px; }
+.radio-opt, .check-opt {
+  display: flex; align-items: center; gap: 6px;
+  cursor: pointer; font-weight: 400;
+}
+.radio-opt input, .check-opt input { width: auto; cursor: pointer; }
+.check-opt.destaque { font-weight: 600; color: var(--blue); }
+
+/* ── Botões ──────────────────────────────────────────────── */
+.btn-primary {
+  background: var(--blue); color: #fff;
+  border: none; border-radius: 6px;
+  padding: 12px 28px; font-size: 15px; font-weight: 700;
+  cursor: pointer; transition: background 0.2s;
+  width: 100%; margin-top: 8px;
+}
+.btn-primary:hover  { background: #006ecc; }
+.btn-primary:disabled { background: #b0bec5; cursor: not-allowed; }
+
+.btn-secondary {
+  background: #fff; color: var(--blue);
+  border: 2px solid var(--blue); border-radius: 6px;
+  padding: 10px 20px; font-size: 14px; font-weight: 700;
+  cursor: pointer; white-space: nowrap;
+  transition: all 0.2s;
+}
+.btn-secondary:hover { background: var(--blue); color: #fff; }
+
+.btn-outline {
+  background: transparent; color: #666;
+  border: 2px solid var(--border); border-radius: 6px;
+  padding: 12px 24px; font-size: 15px; font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-row { display: flex; gap: 12px; margin-top: 8px; }
+.btn-row .btn-primary { flex: 1; margin-top: 0; }
+
+/* ── Alertas e Info ──────────────────────────────────────── */
+.alert {
+  border-radius: 6px; padding: 12px 16px;
+  font-size: 14px; margin: 8px 0;
+  background: #fff3e0; border-left: 4px solid #ff9800; color: #e65100;
+}
+.alert-info  { background: #e3f2fd; border-left-color: var(--blue); color: #1565c0; }
+.alert-erro  { background: #ffebee; border-left-color: var(--red);  color: var(--red); }
+.alert.hidden { display: none; }
+
+.info-box {
+  background: #f0f7ff; border: 1px solid #90caf9;
+  border-radius: 6px; padding: 12px 16px;
+  font-size: 14px; line-height: 1.6;
+}
+.info-box.erro { background: #ffebee; border-color: #ef9a9a; }
+
+/* ── Perfil Viajante ─────────────────────────────────────── */
+.perfil-box { margin-bottom: 20px; }
+.perfil-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px; background: #f0f7ff; border-radius: 8px; padding: 16px;
+}
+.perfil-grid span { display: flex; flex-direction: column; gap: 2px; }
+.perfil-grid label { font-size: 11px; color: #777; text-transform: uppercase; letter-spacing: 0.5px; }
+.perfil-grid strong { font-size: 14px; }
+.txt-individual { color: var(--blue); }
+
+/* ── Badges ──────────────────────────────────────────────── */
+.badge {
+  display: inline-block; border-radius: 20px;
+  padding: 6px 14px; font-size: 13px; font-weight: 700;
+}
+.badge.hidden { display: none; }
+.badge-comum       { background: #e8f5e9; color: var(--green); }
+.badge-emergencial { background: #ffebee; color: var(--red); }
+
+.categoria-badge {
+  background: #e3f2fd; border-radius: 6px;
+  padding: 8px 12px; font-size: 13px; font-weight: 600;
+  color: var(--blue); margin-bottom: 12px;
+}
+
+/* ── Exceção / Laudo ─────────────────────────────────────── */
+.excecao-form {
+  margin-top: 12px; padding: 16px;
+  background: #fff; border: 1.5px solid #90caf9;
+  border-radius: 8px;
+}
+
+/* ── Sucesso ─────────────────────────────────────────────── */
+.sucesso-box { text-align: center; padding: 32px 16px; }
+.sucesso-icon { font-size: 56px; margin-bottom: 16px; }
+.sucesso-box h2 { font-size: 22px; margin-bottom: 8px; }
+.sucesso-box p  { color: #555; margin-bottom: 8px; }
+
+/* ── Utilitários ─────────────────────────────────────────── */
+.hidden { display: none !important; }
+
+/* ── Responsivo ──────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  .btn-row          { flex-direction: column; }
+  .card             { padding: 18px; }
+}
+</style>

@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Portal de Viagens — Magalu</title>
+  <?!= include('Estilos'); ?>
+</head>
+<body>
+
+<!-- ── Header ────────────────────────────────────────────── -->
+<header class="header">
+  <div class="header-inner">
+    <div class="logo">
+      <span class="logo-icon">✈</span>
+      <span>Portal de Viagens</span>
+    </div>
+    <span class="badge-magalu">Magalu</span>
+  </div>
+</header>
+
+<main class="container">
+
+  <!-- Passo 1: Identificação -->
+  <div id="step-identificacao" class="card">
+    <h2 class="card-title">Identificação do Solicitante</h2>
+
+    <div class="field-group">
+      <label>Tipo de solicitação</label>
+      <div class="radio-group">
+        <label class="radio-opt">
+          <input type="radio" name="tipo_solicitacao" value="proprio" checked onchange="onTipoSolicitacao(this)">
+          Para mim mesmo
+        </label>
+        <label class="radio-opt">
+          <input type="radio" name="tipo_solicitacao" value="delegado" onchange="onTipoSolicitacao(this)">
+          Em nome de outro colaborador
+        </label>
+      </div>
+    </div>
+
+    <div class="field-group">
+      <label for="matriculaOperador">Sua matrícula <span class="req">*</span></label>
+      <div class="input-row">
+        <input type="text" id="matriculaOperador" placeholder="Ex: 123456" maxlength="10" />
+        <button class="btn-secondary" onclick="buscarOperador()">Identificar</button>
+      </div>
+      <div id="infoOperador" class="info-box hidden"></div>
+    </div>
+
+    <div id="secaoViajante" class="field-group hidden">
+      <label for="matriculaViajante">Matrícula do viajante <span class="req">*</span></label>
+      <div class="input-row">
+        <input type="text" id="matriculaViajante" placeholder="Matrícula do colaborador que irá viajar" maxlength="10" />
+        <button class="btn-secondary" onclick="buscarViajante()">Buscar</button>
+      </div>
+      <div id="infoViajante" class="info-box hidden"></div>
+      <div id="alertaDelegacao" class="alert hidden"></div>
+    </div>
+
+    <button class="btn-primary" id="btnAvancarViagem" disabled onclick="avancarParaViagem()">
+      Avançar para dados da viagem →
+    </button>
+  </div>
+
+  <!-- Passo 2: Dados da Viagem -->
+  <div id="step-viagem" class="card hidden">
+    <h2 class="card-title">Dados da Viagem</h2>
+
+    <div id="perfilViajante" class="perfil-box"></div>
+
+    <div class="grid-2">
+      <div class="field-group">
+        <label for="destino">Destino (cidade) <span class="req">*</span></label>
+        <input type="text" id="destino" placeholder="Ex: Porto Alegre" />
+      </div>
+      <div class="field-group">
+        <label for="estado">Estado</label>
+        <input type="text" id="estado" placeholder="Ex: RS" maxlength="2" />
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="field-group">
+        <label for="dataIda">Data de ida <span class="req">*</span></label>
+        <input type="date" id="dataIda" onchange="calcularAntecedencia()" />
+      </div>
+      <div class="field-group">
+        <label for="dataVolta">Data de volta <span class="req">*</span></label>
+        <input type="date" id="dataVolta" />
+      </div>
+    </div>
+
+    <div id="alertaAntecedencia" class="alert hidden"></div>
+    <div id="badgeClassificacao" class="badge hidden"></div>
+
+    <div class="field-group">
+      <label>Serviços necessários <span class="req">*</span></label>
+      <div class="check-group">
+        <label class="check-opt"><input type="checkbox" value="Aereo">      ✈ Aéreo</label>
+        <label class="check-opt"><input type="checkbox" value="Hospedagem"> 🏨 Hospedagem</label>
+        <label class="check-opt"><input type="checkbox" value="Carro">      🚗 Aluguel de carro</label>
+      </div>
+    </div>
+
+    <div class="field-group">
+      <label for="motivoViagem">Motivo da viagem <span class="req">*</span></label>
+      <textarea id="motivoViagem" rows="3" placeholder="Ex: Reunião com cliente, treinamento, visita técnica..."></textarea>
+    </div>
+
+    <!-- Bloco de hospedagem (aparece quando Hospedagem selecionado) -->
+    <div id="blocoHospedagem" class="card card-inner hidden">
+      <h3>🏨 Hospedagem</h3>
+      <div id="categoriaHospedagem" class="categoria-badge"></div>
+
+      <div id="blocoExcecaoSaude" class="field-group hidden">
+        <label class="check-opt destaque">
+          <input type="checkbox" id="chkExcecao" onchange="onExcecaoChange(this)">
+          Solicitar quarto individual por condição de saúde
+        </label>
+
+        <div id="camposExcecao" class="excecao-form hidden">
+          <div class="field-group">
+            <label for="excecaoMotivo">Tipo de condição <span class="req">*</span></label>
+            <select id="excecaoMotivo">
+              <option value="">Selecione...</option>
+              <option value="Apneia do sono">Apneia do sono</option>
+              <option value="Insônia crônica">Insônia crônica</option>
+              <option value="Outro distúrbio do sono">Outro distúrbio do sono</option>
+              <option value="Mobilidade reduzida">Mobilidade reduzida</option>
+              <option value="Outro">Outro (especifique)</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label for="excecaoCID">CID <span class="req">*</span></label>
+            <input type="text" id="excecaoCID" placeholder="Ex: G47.3" maxlength="10" />
+          </div>
+          <div class="field-group">
+            <label for="excecaoLaudo">Laudo médico (PDF obrigatório, máx 5 MB) <span class="req">*</span></label>
+            <input type="file" id="excecaoLaudo" accept=".pdf" onchange="validarLaudo(this)" />
+            <span id="laudoStatus" class="field-hint"></span>
+          </div>
+          <div class="field-group">
+            <label for="excecaoValidade">Validade do laudo <span class="req">*</span></label>
+            <input type="date" id="excecaoValidade" />
+          </div>
+          <div class="field-group">
+            <label for="excecaoObs">Observações adicionais</label>
+            <textarea id="excecaoObs" rows="2" placeholder="Informações complementares (opcional)"></textarea>
+          </div>
+          <div class="alert alert-info">
+            ⚠ A aprovação desta exceção será encaminhada ao RH / Medicina do Trabalho antes da confirmação da reserva.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Viajantes adicionais -->
+    <div class="card card-inner">
+      <h3>👥 Viajantes adicionais (casamento de viagem)</h3>
+      <p class="field-hint">Informe colegas com a mesma viagem para otimizar a cotação.</p>
+      <div class="input-row">
+        <input type="text" id="matriculaColega" placeholder="Matrícula do colega" maxlength="10" />
+        <button class="btn-secondary" onclick="buscarColega()">Verificar compatibilidade</button>
+      </div>
+      <div id="infoColega" class="hidden"></div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn-outline" onclick="voltarParaIdentificacao()">← Voltar</button>
+      <button class="btn-primary" id="btnSubmeter" onclick="submeterSolicitacao()">
+        Enviar solicitação ✓
+      </button>
+    </div>
+  </div>
+
+  <!-- Protocolo gerado -->
+  <div id="step-protocolo" class="card hidden">
+    <div class="sucesso-box">
+      <div class="sucesso-icon">✅</div>
+      <h2>Solicitação enviada!</h2>
+      <p>Seu protocolo é: <strong id="protocoloGerado">—</strong></p>
+      <p>As agências credenciadas foram notificadas. Você receberá atualizações por e-mail.</p>
+      <button class="btn-primary" onclick="novaSolicitacao()">Nova solicitação</button>
+    </div>
+  </div>
+
+</main>
+
+<script>
+// ── Estado da aplicação ──────────────────────────────────────
+const estado = {
+  operador: null,
+  viajante: null,
+  ehDelegacao: false,
+  laudoBase64: null,
+  laudoNome: null,
+};
+
+// ── Funções de navegação ─────────────────────────────────────
+function onTipoSolicitacao(radio) {
+  estado.ehDelegacao = radio.value === 'delegado';
+  document.getElementById('secaoViajante').classList.toggle('hidden', !estado.ehDelegacao);
+  checarPodeAvancar();
+}
+
+function avancarParaViagem() {
+  document.getElementById('step-identificacao').classList.add('hidden');
+  document.getElementById('step-viagem').classList.remove('hidden');
+  renderizarPerfilViajante();
+}
+
+function voltarParaIdentificacao() {
+  document.getElementById('step-viagem').classList.add('hidden');
+  document.getElementById('step-identificacao').classList.remove('hidden');
+}
+
+function novaSolicitacao() {
+  location.reload();
+}
+
+// ── Busca de colaboradores ────────────────────────────────────
+function buscarOperador() {
+  const mat = document.getElementById('matriculaOperador').value.trim();
+  if (!mat) return alertar('Informe sua matrícula.');
+  setLoading('infoOperador', true);
+  google.script.run
+    .withSuccessHandler(r => onOperadorEncontrado(r.dados))
+    .withFailureHandler(e => setErro('infoOperador', e.message))
+    .doPost_proxy({ acao: 'buscarViajante', matricula: mat });
+}
+
+function onOperadorEncontrado(viajante) {
+  estado.operador = viajante;
+  const el = document.getElementById('infoOperador');
+  el.innerHTML = `<strong>${viajante.nome}</strong> | ${viajante.cargo} | ${viajante.filial}`;
+  el.classList.remove('hidden', 'erro');
+  if (!estado.ehDelegacao) {
+    estado.viajante = viajante;
+    checarPodeAvancar();
+  }
+}
+
+function buscarViajante() {
+  const mat = document.getElementById('matriculaViajante').value.trim();
+  const matOp = document.getElementById('matriculaOperador').value.trim();
+  if (!mat) return alertar('Informe a matrícula do viajante.');
+  google.script.run
+    .withSuccessHandler(r => {
+      if (!r.sucesso) { setErro('alertaDelegacao', r.erro); return; }
+      onViajanteEncontrado(r.dados.viajante, r.dados.delegacao);
+    })
+    .withFailureHandler(e => setErro('alertaDelegacao', e.message))
+    .doPost_proxy({ acao: 'validarDelegacao', matriculaOperador: matOp, matriculaViajante: mat });
+}
+
+function onViajanteEncontrado(viajante, delegacao) {
+  estado.viajante = viajante;
+  const el = document.getElementById('infoViajante');
+  el.innerHTML = `<strong>${viajante.nome}</strong> | ${viajante.cargo}<br>
+    🏨 Hospedagem: <strong>${viajante.categoria_hospedagem}</strong> — ${viajante.motivo_categoria_hosp}<br>
+    🚗 Veículo: <strong>${viajante.categoria_veiculo}</strong> — ${viajante.motivo_categoria_veic}`;
+  el.classList.remove('hidden');
+  checarPodeAvancar();
+}
+
+function buscarColega() {
+  const mat = document.getElementById('matriculaColega').value.trim();
+  const matV = estado.viajante?.matricula;
+  if (!mat || !matV) return;
+  google.script.run
+    .withSuccessHandler(r => renderizarCompatibilidadeColega(r.dados))
+    .withFailureHandler(e => console.error(e))
+    .doPost_proxy({ acao: 'buscarCompatibildade', matriculaColega: mat, matriculaViajante: matV });
+}
+
+function renderizarCompatibilidadeColega(dados) {
+  const el = document.getElementById('infoColega');
+  el.innerHTML = `
+    <div class="info-box" style="margin-top:8px">
+      <strong>${dados.nome}</strong> | ${dados.cargo} | CC: ${dados.centro_custo}<br>
+      🏨 Compatibilidade quarto: <strong>${dados.compat_quarto ? '✅ Compartilhado' : '⚠ ' + dados.motivo_hosp_colega}</strong><br>
+      🚗 Compatibilidade veículo: <strong>${dados.compat_veiculo ? '✅ Compartilhado' : '⚠ ' + dados.motivo_veic_colega}</strong>
+    </div>`;
+  el.classList.remove('hidden');
+}
+
+// ── Cálculos de antecedência ─────────────────────────────────
+function calcularAntecedencia() {
+  const dataIda = new Date(document.getElementById('dataIda').value);
+  const agora   = new Date();
+  const dias    = Math.floor((dataIda - agora) / 86400000);
+  const badge   = document.getElementById('badgeClassificacao');
+  const alerta  = document.getElementById('alertaAntecedencia');
+
+  if (isNaN(dias)) return;
+
+  badge.classList.remove('hidden', 'badge-comum', 'badge-emergencial');
+  alerta.classList.add('hidden');
+
+  if (dias < 0) {
+    alerta.textContent = '❌ A data de ida não pode ser no passado.';
+    alerta.classList.remove('hidden');
+  } else if (dias < 15) {
+    badge.textContent = '⚠ Aéreo Emergencial — aprovação N1 + N2 obrigatória';
+    badge.classList.add('badge-emergencial');
+    alerta.textContent = `Antecedência: ${dias} dias — viagem emergencial requer aprovação adicional.`;
+    alerta.classList.remove('hidden');
+  } else {
+    badge.textContent = `✅ Aéreo Comum — ${dias} dias de antecedência`;
+    badge.classList.add('badge-comum');
+  }
+}
+
+// ── Exceção de saúde ─────────────────────────────────────────
+function onExcecaoChange(chk) {
+  document.getElementById('camposExcecao').classList.toggle('hidden', !chk.checked);
+  checarPodeSubmeter();
+}
+
+function validarLaudo(input) {
+  const file   = input.files[0];
+  const status = document.getElementById('laudoStatus');
+  estado.laudoBase64 = null;
+
+  if (!file) return;
+  if (file.type !== 'application/pdf') {
+    status.textContent = '❌ Apenas arquivos PDF são aceitos.';
+    status.style.color = '#e53935';
+    input.value = '';
+    return;
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    status.textContent = '❌ O arquivo não pode ultrapassar 5 MB.';
+    status.style.color = '#e53935';
+    input.value = '';
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    estado.laudoBase64 = e.target.result.split(',')[1];
+    estado.laudoNome   = file.name;
+    status.textContent = `✅ ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+    status.style.color = '#2e7d32';
+    checarPodeSubmeter();
+  };
+  reader.readAsDataURL(file);
+}
+
+// ── Serviços selecionados ─────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.check-group input').forEach(chk => {
+    chk.addEventListener('change', () => {
+      const temHosp = [...document.querySelectorAll('.check-group input:checked')]
+        .some(c => c.value === 'Hospedagem');
+      document.getElementById('blocoHospedagem').classList.toggle('hidden', !temHosp);
+      // Exibe opção de exceção somente para quem tem categoria Compartilhado
+      if (estado.viajante?.categoria_hospedagem === 'Compartilhado') {
+        document.getElementById('blocoExcecaoSaude').classList.toggle('hidden', !temHosp);
+      }
+    });
+  });
+});
+
+// ── Renderizações ─────────────────────────────────────────────
+function renderizarPerfilViajante() {
+  const v  = estado.viajante;
+  const el = document.getElementById('perfilViajante');
+  el.innerHTML = `
+    <div class="perfil-grid">
+      <span><label>Viajante</label><strong>${v.nome}</strong></span>
+      <span><label>Cargo</label>${v.cargo}</span>
+      <span><label>Filial</label>${v.filial}</span>
+      <span><label>CC</label>${v.centro_custo}</span>
+      <span><label>🏨 Hospedagem</label><strong class="${v.categoria_hospedagem === 'Individual' ? 'txt-individual' : ''}">${v.categoria_hospedagem}</strong></span>
+      <span><label>🚗 Veículo</label><strong>${v.categoria_veiculo}</strong></span>
+    </div>`;
+  document.getElementById('categoriaHospedagem').textContent =
+    `🏨 Quarto: ${v.categoria_hospedagem} — ${v.motivo_categoria_hosp}`;
+}
+
+// ── Submissão ─────────────────────────────────────────────────
+function submeterSolicitacao() {
+  const servicos = [...document.querySelectorAll('.check-group input:checked')].map(c => c.value);
+  if (!servicos.length) return alertar('Selecione ao menos um serviço.');
+
+  const temExcecao = document.getElementById('chkExcecao')?.checked;
+  if (temExcecao && !estado.laudoBase64) return alertar('O laudo médico em PDF é obrigatório para a exceção de quarto individual.');
+
+  const payload = {
+    acao:                 'submeterSolicitacao',
+    matricula_viajante:   estado.viajante.matricula,
+    matricula_operador:   estado.operador?.matricula || estado.viajante.matricula,
+    nome_operador:        estado.operador?.nome      || estado.viajante.nome,
+    via_delegacao:        estado.ehDelegacao,
+    destino_cidade:       document.getElementById('destino').value.trim(),
+    destino_estado:       document.getElementById('estado').value.trim(),
+    data_ida:             document.getElementById('dataIda').value,
+    data_volta:           document.getElementById('dataVolta').value,
+    tipo_servico:         servicos,
+    motivo_viagem:        document.getElementById('motivoViagem').value.trim(),
+    quarto_excecao_saude: temExcecao || false,
+    excecao_motivo:       temExcecao ? document.getElementById('excecaoMotivo').value : '',
+    excecao_cid:          temExcecao ? document.getElementById('excecaoCID').value    : '',
+    excecao_validade:     temExcecao ? document.getElementById('excecaoValidade').value : '',
+    excecao_obs:          temExcecao ? document.getElementById('excecaoObs').value    : '',
+    laudoBase64:          estado.laudoBase64 || null,
+    laudoNome:            estado.laudoNome   || null,
+  };
+
+  document.getElementById('btnSubmeter').disabled = true;
+  document.getElementById('btnSubmeter').textContent = 'Enviando...';
+
+  google.script.run
+    .withSuccessHandler(r => {
+      document.getElementById('step-viagem').classList.add('hidden');
+      document.getElementById('step-protocolo').classList.remove('hidden');
+      document.getElementById('protocoloGerado').textContent = r.dados.reqID;
+    })
+    .withFailureHandler(e => {
+      alertar(e.message);
+      document.getElementById('btnSubmeter').disabled = false;
+      document.getElementById('btnSubmeter').textContent = 'Enviar solicitação ✓';
+    })
+    .doPost_proxy(payload);
+}
+
+// ── Guardas e helpers UI ──────────────────────────────────────
+function checarPodeAvancar() {
+  const ok = estado.operador && (estado.ehDelegacao ? !!estado.viajante : true);
+  document.getElementById('btnAvancarViagem').disabled = !ok;
+}
+
+function checarPodeSubmeter() {
+  const temExcecao = document.getElementById('chkExcecao')?.checked;
+  const laudoOk    = !temExcecao || !!estado.laudoBase64;
+  document.getElementById('btnSubmeter').disabled = !laudoOk;
+}
+
+function setLoading(id, on) {
+  document.getElementById(id).innerHTML = on ? '<em>Buscando...</em>' : '';
+  document.getElementById(id).classList.remove('hidden');
+}
+
+function setErro(id, msg) {
+  const el = document.getElementById(id);
+  el.textContent = '❌ ' + msg;
+  el.classList.remove('hidden');
+  el.classList.add('erro');
+}
+
+function alertar(msg) { alert(msg); }
+
+// Proxy para chamar doPost do GAS com o payload correto
+function doPost_proxy(payload) {
+  // Esta função é um alias — o GAS não tem "doPost_proxy",
+  // então usamos google.script.run com a função real
+}
+</script>
+</body>
+</html>
