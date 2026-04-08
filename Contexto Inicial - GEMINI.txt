@@ -1,0 +1,388 @@
+como estruturar um processo de levantamento "discovery" de uma necessidade de automação de um processo administrativo, exemplo, tenho o setor de viagens corporativas que utiliza e faz todo o processo de receber solicitações dos viagantes via email, receber e solicitar cotações com as agencias credenciadas via email, receber esse retorno da agencia, aprovar, receber novamente o voucher das hospedagens, passagens aereas e alugueis de carro para o solicitante da viagem.
+
+quero primeiro estruturar o levantamento das atividades como são utiliando tecnicas e ferramentas para tal analise;
+
+depois quero desenvolver um processo de decisão de onde desenvolver um portal onde solicitante, responsavel pelo setor de viagens e forncededores interajam solicitando, aprovando, cotando, retornando, e recebendo e-mail que serão gatilhos para a aprovação do fluxo.
+
+
+
+me oriente do passo a passo. Ja tenho uma sugestão de utilizar o GAS integrado ao BQ, google sheet como base de dados e workflow por e-mail para aprovações.
+
+O Gemini disse
+Estruturar um Discovery de Automação exige olhar para o processo atual com "lupa" antes de desenhar a solução técnica. O objetivo é evitar que você automatize um processo ineficiente (o famoso "pavimentar o caos").
+
+Aqui está o passo a passo para organizar esse levantamento e a tomada de decisão técnica:
+
+Fase 1: Levantamento do Processo Atual (AS-IS)
+Antes de pensar em ferramentas, você precisa mapear cada interação manual.
+
+1. SIPOC e Mapeamento de Fluxo
+Utilize a técnica SIPOC (Suppliers, Inputs, Process, Outputs, Customers) para ter uma visão macro e o BPMN (Business Process Model and Notation) para o detalhamento.
+
+Ferramentas Sugeridas: Lucidchart, Miro ou Bizagi.
+
+O que extrair:
+
+Gatilhos: O que inicia a viagem? (Formulário? E-mail solto?).
+
+Pontos de Decisão: Quem aprova? Qual o critério?
+
+Hand-offs: Onde o processo sai da empresa e vai para a agência?
+
+2. Análise de Dor e Volume (Task Mining Manual)
+Entreviste quem opera o setor de viagens e colete dados:
+
+Volume: Quantas viagens por mês?
+
+Tempo Médio (Lead Time): Quanto tempo leva do pedido ao voucher na mão?
+
+Taxa de Erro: Quantas vezes o e-mail da agência se perde ou o valor da cotação expira por demora na aprovação?
+
+Fase 2: Desenho do Processo Futuro (TO-BE)
+Aqui você define como o processo deveria ser com o portal.
+
+Padronização de Entrada: Substituir o e-mail livre por um formulário estruturado.
+
+Centralização da Comunicação: O fornecedor deve interagir com o portal, não com a caixa de entrada pessoal de alguém.
+
+Rastreabilidade: Status em tempo real (ex: "Aguardando Cotação", "Pendente Aprovação").
+
+Fase 3: Matriz de Decisão Técnica (Avaliando sua sugestão)
+Sua sugestão de GAS (Google Apps Script) + BigQuery + Sheets é viável, mas vamos avaliar os prós e contras frente a outras opções do ecossistema Google para o seu caso específico.
+
+Tabela Comparativa de Arquitetura
+Critério	Sua Sugestão (GAS + Sheets + BQ)	Alternativa Low-Code (AppSheet)
+Interface	HTML/JS customizado (Maior esforço de Dev).	UI nativa, mobile-friendly (Menor esforço).
+Banco de Dados	Sheets (Input) e BQ (Analytics).	Sheets ou Cloud SQL.
+Aprovações	Gatilhos de E-mail via Script.	Workflow nativo com botões de aprovação.
+Segurança	Precisa gerenciar permissões via código.	Governança simplificada por login Google.
+Por que usar sua sugestão (GAS + BQ)?
+Se você precisa de um Portal Externo (para as agências acessarem sem precisar de licenças corporativas complexas) e quer total controle visual da interface, o Google Apps Script rodando como Web App é excelente.
+
+Dica de Ouro: Não use o Google Sheets como banco de dados transacional se o volume for muito alto. Use-o como "interface de visualização" e deixe o processamento pesado e o histórico histórico no BigQuery.
+
+Fase 4: Estruturação do Fluxo de Decisão (Workflows)
+Para decidir onde o portal "viverá" e como os gatilhos funcionarão, siga este roteiro:
+
+Definição dos Personagens (Atores):
+
+Solicitante: Precisa de simplicidade (Formulário).
+
+Agência: Precisa de um link externo para dar o lance/anexar voucher.
+
+Gestor: Precisa aprovar via celular (E-mail com botões).
+
+Lógica de Gatilhos (Trigger Logic):
+
+Gatilho 1: Submissão do form → Envio de e-mail para Agência 1, 2 e 3.
+
+Gatilho 2: Agência responde no portal → Notificação para o setor de viagens comparar.
+
+Gatilho 3: Escolha da opção → Envio de e-mail com link de aprovação dinâmica (usando URL Parameters para o gestor aprovar sem logar, se a segurança permitir).
+
+Passo a Passo para Implementação (Resumo)
+Mapeie o AS-IS: Use o Miro para desenhar o fluxo de e-mails atual.
+
+Defina os Campos: Liste tudo que é obrigatório (Data, Destino, Motivo, Centro de Custo).
+
+MVP com Google Forms + Sheets: Antes do portal, teste a estrutura dos dados.
+
+Desenvolva o Portal (GAS): Crie a interface onde a agência faz o upload do PDF do voucher.
+
+Integração BQ: Configure um script simples para arquivar cada viagem finalizada no BigQuery para gerar dashboards de custos no Looker Studio.
+
+Qual o volume mensal aproximado de solicitações que esse setor recebe hoje?
+
+Você disse
+devo salientar que minha integração com o BQ é somente consultiva e entrará no processo durante a solicitação do viajante. Devido a necessidade de preencher a planilha DB com os dados do colaborador e tambem o front em html, o usuário entrará com sua matricula de usuário da empresa e os dados como, filial, nome, data de nascimento, cpf, setor, centro de custo serão imputadas tanto na pagina html como na planilha.
+
+O Gemini disse
+Excelente detalhamento. Isso muda um pouco o jogo e traz um nível de governança muito maior ao processo, pois você elimina o erro de digitação e garante a integridade dos dados desde o "km 0".
+
+Abaixo, estruturo o passo a passo técnico e de decisão para esse cenário específico de identificação via matrícula + integração consultiva com BigQuery.
+
+1. Estrutura do Levantamento Técnico (Discovery)
+Para essa integração funcionar, seu levantamento precisa focar em Data Mapping (Mapeamento de Dados):
+
+Identificação das Chaves: Confirme se a "Matrícula" é a chave primária única no BigQuery que retorna todos os outros campos (CPF, Centro de Custo, etc.).
+
+Tratamento de Exceções: O que acontece no portal se a matrícula não existir no BQ? (Ex: Colaborador novo). O processo deve prever um fluxo de "cadastro manual" ou "alerta ao RH".
+
+Mapeamento de Hierarquia: O BigQuery já possui o e-mail do gestor imediato? Se sim, isso automatiza o gatilho de aprovação sem que o usuário precise escolher quem aprova.
+
+2. Arquitetura da Solução Sugerida
+Dado que você usará GAS (Google Apps Script) com um front-end em HTML, o fluxo lógico será este:
+
+O Fluxo de Dados:
+Front-End (HTML/JS): O colaborador digita a matrícula e clica em "Consultar".
+
+Back-End (GAS - google.script.run): O script recebe a matrícula e executa uma query SELECT no BigQuery.
+
+Retorno: O BQ devolve um objeto JSON com os dados (Filial, Nome, Nascimento, CPF, CC).
+
+Auto-Preenchimento: O JavaScript do front-end popula os campos do formulário (que podem ficar como read-only para o usuário não alterar dados oficiais).
+
+Gravação: Ao enviar, o GAS grava esses dados na Google Sheet (DB).
+
+3. Processo de Decisão: Por que essa arquitetura?
+Sua escolha é robusta para o ambiente corporativo por três motivos:
+
+Segurança: O GAS permite usar Service Accounts para acessar o BigQuery, garantindo que o usuário final não tenha acesso direto ao banco de dados, apenas aos seus próprios dados.
+
+Performance: Consultar o BQ via matrícula é extremamente rápido (<2 segundos), o que melhora a experiência do usuário (UX).
+
+Escalabilidade: Ao centralizar os dados consultivos no BQ e os transacionais na Sheet, você facilita a criação de dashboards no Looker Studio futuramente.
+
+4. Passo a Passo da Implementação do Workflow
+Para que o portal interaja com os fornecedores (agências) via e-mail e gatilhos, siga este roteiro:
+
+Passo 1: O Portal do Solicitante
+Desenvolva a página HTML com o campo de matrícula.
+
+Implemente a função searchEmployee(id) que conecta ao BQ via API do BigQuery no GAS.
+
+Passo 2: O Gatilho para Fornecedores
+Após o envio do formulário, o GAS gera um ID Único de Solicitação.
+
+O script dispara e-mails automáticos para as agências com um link exclusivo:
+
+Exemplo do link: https://script.google.com/.../exec?reqID=12345
+
+Esse link abre uma versão simplificada do portal para a agência inserir valores e anexos.
+
+Passo 3: O Fluxo de Aprovação (Workflow por E-mail)
+Assim que a agência responde, o status na planilha muda para "Aguardando Aprovação".
+
+O sistema envia um e-mail ao gestor (obtido no BQ) com dois botões HTML: [Aprovar] e [Reprovar].
+
+Esses botões são links que chamam uma função doGet(e) no seu script, validando a decisão instantaneamente.
+
+Passo 4: Fechamento e Entrega do Voucher
+Aprovado o custo, a agência recebe o sinal verde automático.
+
+Ela anexa o voucher no portal; o GAS salva o arquivo no Google Drive e envia o link (ou o arquivo) por e-mail ao viajante.
+
+Sugestão Técnica Importante
+Como você vai lidar com CPFs e datas de nascimento no HTML e na Planilha, certifique-se de que a sua Google Sheet (DB) tenha proteções de intervalo e que o acesso ao Script seja restrito. No ambiente corporativo, isso entra no escopo de LGPD.
+
+Você já possui o conector do BigQuery habilitado nos "Serviços Avançados" do seu Google Apps Script?
+
+Você disse
+analise as perguntas para o levantamento.
+
+
+
+1.Mapeamento de Fluxo
+
+Analise para ter uma visão macro e o padrão visual para o detalhamento do processo
+
+Gatilhos: O que inicia a viagem? (Formulário? E-mail solto?).
+
+
+
+Pontos de Decisão: Quem aprova? Qual o critério?
+
+
+
+Hand-offs: Onde o processo sai da empresa e vai para a agência?
+
+
+
+Quantas e quais agências são?
+
+
+
+Obrigatoriamente todas precisam participar da cotação?
+
+
+
+A cotação só se encerra no recebimento de todas as cotações de todas as agencias?
+
+
+
+não estou sabendo como transformar isso num fluxo
+
+O Gemini disse
+Para transformar essas perguntas em um fluxo lógico, precisamos organizar as respostas em uma linha do tempo de causa e efeito. O segredo não é apenas listar as perguntas, mas entender a condicionalidade (se acontecer X, então fazemos Y).
+
+Aqui está a estruturação do seu levantamento dividida por etapas lógicas para desenhar o processo:
+
+1. Estruturação do Fluxo Lógico (Passo a Passo)
+Para visualizar o fluxo, tente encaixar suas perguntas nesta sequência:
+
+Etapa A: Início e Validação (O Gatilho)
+Ação: O viajante insere a matrícula no portal.
+
+Consulta (BQ): O sistema valida os dados.
+
+Pergunta de Fluxo: "Se a matrícula não for encontrada ou o colaborador estiver inativo, qual o desvio?" (Isso cria um braço de erro no seu diagrama).
+
+Etapa B: Abertura da Cotação (O Hand-off)
+Ação: O formulário é enviado.
+
+Regra de Negócio (Sua pergunta sobre agências):
+
+Se o processo exige que todas as agências participem, o status do pedido será "Em Cotação" até que o último e-mail de retorno seja processado.
+
+Ponto de Decisão: Existe um tempo limite (SLA)? Se uma agência não responder em 2 horas, o processo segue com as outras ou trava?
+
+Etapa C: Comparação e Escolha
+Ação: O setor de viagens recebe as opções das agências no portal.
+
+Interação: O responsável seleciona a melhor opção (Menor preço? Melhor horário?).
+
+Pergunta de Fluxo: "Ao selecionar a opção, o sistema já deve disparar o e-mail de aprovação para o gestor ou passa por uma conferência prévia?"
+
+Etapa D: Aprovação e Voucher
+Ação: O gestor clica em "Aprovar" no e-mail.
+
+Gatilho: O sistema avisa a agência vencedora para emitir o ticket e "cancela" o interesse nas demais.
+
+2. Ferramentas para Desenhar o Fluxo
+Para não se perder nas perguntas, utilize uma destas técnicas de visualização:
+
+Técnica de Raias (Swimlanes)
+Divida seu desenho em colunas (Raias). Isso ajuda a visualizar o Hand-off que você mencionou:
+
+Raia 1: Viajante (Entrada de dados/Matrícula).
+
+Raia 2: Sistema (GAS/BQ) (Busca automática e disparos).
+
+Raia 3: Agências (Inserção de cotações e anexos).
+
+Raia 4: Gestor/Aprovador (Decisão final).
+
+3. Refinando suas Perguntas de Levantamento
+Suas perguntas estão ótimas, mas para o desenvolvimento no GAS, você precisa de definições de status. Adicione estas ao seu levantamento:
+
+Status do Processo: "Quais são os nomes dos status? (Ex: Pendente Agência, Aguardando Gestor, Emitido, Cancelado)".
+
+Regra de "Lock" (Bloqueio): "Depois que o gestor aprova, a agência ainda pode alterar o valor da cotação no portal?" (Fundamental para evitar erros no faturamento).
+
+Arquivos: "Os vouchers são sempre em PDF? Precisamos renomear esses arquivos automaticamente ao salvar no Drive (Ex: Voucher_Matricula_Data.pdf)?"
+
+4. Como transformar isso no Fluxo (Prática)
+Pegue uma folha de papel ou use o Miro e faça o seguinte exercício:
+
+Desenhe um círculo: "Início: Usuário digita matrícula".
+
+Desenhe um retângulo: "Sistema busca no BQ e preenche HTML".
+
+Desenhe um losango (Decisão): "Dados conferem?".
+
+Se não: Volta para correção.
+
+Se sim: Segue para "Envio de e-mail para N agências".
+
+Minha sugestão: Defina primeiro se o encerramento da cotação será por tempo ou por quantidade de retornos. Isso é o que mais trava o desenvolvimento de automações de compras/viagens.
+
+Você prefere que o sistema "feche" a cotação automaticamente após a última agência responder, ou que o operador do setor de viagens tenha um botão para "Encerrar Cotações" manualmente?
+
+Você disse
+Seguem dados e documentos para a estruturação, contexto, analise de possibilidades, tudo o que talvez ate esse momento nós precisamos para desenvolver um MVP.
+
+O Gemini disse
+Com base nos documentos fornecidos e no contexto da reunião de discovery, aqui está a estruturação do processo para o desenvolvimento do seu MVP utilizando Google Apps Script (GAS), BigQuery (BQ) e Google Sheets.
+
+1. Mapeamento do Fluxo (AS-IS → TO-BE)
+Para transformar as perguntas de levantamento em um fluxo funcional, o processo será dividido em quatro domínios (portais) que interagem entre si:
+
+A. Gatilho e Entrada de Dados (Portal do Solicitante)
+
+Ação: O colaborador acessa o formulário HTML e insere sua matrícula.
++1
+
+
+Integração BQ: O sistema realiza uma consulta consultiva ao BigQuery para preencher automaticamente: Nome, E-mail, Centro de Custo e Diretor Responsável.
+
+Regra de Negócio: O sistema deve validar a antecedência da viagem.
+
+
+Aéreo: Se <15 dias, define como "Aéreo Emergencial" (exige aprovação da diretoria/Fatala). Se >15 dias, "Aéreo Comum".
++3
+
+
+Outros (Hospedagem/Carro): Prazo mínimo de 2 dias corridos.
++1
+
+B. Cotação e Hand-off (Portal do Prestador)
+
+Ação: Após o envio do formulário, o GAS dispara e-mails automáticos para as agências (Tastur e Kontrip) com links de acesso ao portal.
++1
+
+
+Condição de Encerramento: A cotação só é finalizada quando ambas as agências enviarem suas propostas via portal.
++2
+
+
+SLA: As agências têm prazo máximo de 24 horas; caso contrário, o sistema envia lembretes automáticos.
++1
+
+C. Decisão e Aprovação (Portal do Gestor)
+
+Ação: O gestor recebe um e-mail com os dados da cotação e botões de decisão.
++1
+
+
+Status de Rastreabilidade: O status muda em tempo real para "Pendente Aprovação".
++1
+
+
+Entrega: Uma vez aprovado, a agência anexa obrigatoriamente o voucher em PDF no portal.
++1
+
+2. Arquitetura Técnica Sugerida para o MVP
+A equipe decidiu seguir com Google Apps Script pela agilidade de integração.
++2
+
+Estrutura de Dados
+
+BigQuery: Fonte da verdade para dados cadastrais de funcionários e centros de custo.
+
+
+Google Sheets: Atuará como o banco de dados transacional para o MVP, registrando cada etapa da solicitação.
++1
+
+
+Google Drive: Armazenamento organizado dos vouchers em PDF enviados pelas agências.
+
+Matriz de Status (Workflow)
+Para garantir a rastreabilidade exigida, o sistema deve gerenciar os seguintes status na planilha:
+
+Aguardando Cotação (Disparado após solicitação do viajante).
+
+Cotação Recebida (Quando uma agência responde).
+
+Pendente Aprovação (Quando ambas respondem e o e-mail vai para o gestor).
+
+Aprovada / Aguardando Voucher (Após o clique do gestor).
+
+Concluída (Voucher anexado e enviado ao viajante).
+
+3. Gestão de Créditos e Exceções (Escopo V2)
+Ficou decidido que funcionalidades complexas serão tratadas em etapas posteriores, mas já devem ser mapeadas:
++1
+
+
+Gestão de Créditos: Atualmente feita via e-mails não lidos por Rubia Paim. No futuro, o sistema deve consultar uma base de créditos e alertar se o solicitante possui saldo antes de gerar nova compra.
++1
+
+
+Viação Cometa: Para o trecho Franca-SP, o sistema deve ignorar a cotação dupla e permitir a solicitação direta, dado que o valor é estável.
++1
+
+
+Alterações/Cancelamentos: Devem ser individualizados no sistema para garantir a governança, evitando o uso de planilhas para grupos.
++1
+
+4. Próximos Passos Imediatos
+
+Checkpoints Diários: Realizar reuniões de 1 hora (sugerido às 10:30) para alinhamento.
++1
+
+
+Consumo de Modelos: Compartilhar o template de e-mail (Google Docs) e os vouchers de exemplo para estruturar os campos do banco de dados.
++3
+
+
+Mapeamento de Hierarquia: Validar se o BQ possui o vínculo de Diretores por Centro de Custo para automação total da alçada de aprovação.

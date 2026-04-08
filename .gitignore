@@ -1,0 +1,25 @@
+# Arquivos sensíveis — nunca versionar
+.env
+*.env
+secrets.json
+service-account.json
+credentials.json
+
+# PDFs dos artefatos de discovery (binários pesados — usar Git LFS se necessário)
+*.pdf
+
+# Node / Clasp
+node_modules/
+.npm/
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# VS Code
+.vscode/settings.json
+.vscode/launch.json
+
+# Logs locais
+*.log
