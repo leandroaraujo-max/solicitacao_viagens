@@ -140,7 +140,8 @@ O GAS é publicado como **Web App** com acesso restrito ao domínio corporativo:
 | Recurso | ID |
 |---|---|
 | Script ID (GAS) | `157FO7diD5kMP3FWh6tkFvPveElKHhVzJKrdPMqTvaQw-sce_wTq4jwXX` |
-| Deployment ID | *(a definir após primeiro deploy)* |
+| Deployment ID | `AKfycbzi3Cy5rJ2pB2QH1B7p-d7HUw9xNPwF1pUrUS6lDRmznQ-Ss1X2js_YNr3wK6vBSTTh` |
+| WEBAPP\_URL | `https://script.google.com/macros/s/AKfycbzi3Cy5rJ2pB2QH1B7p-d7HUw9xNPwF1pUrUS6lDRmznQ-Ss1X2js_YNr3wK6vBSTTh/exec` |
 
 **Deploy via Clasp:**
 ```bash

@@ -21,8 +21,8 @@
 | 11 | Secretaria pode aprovar em nome do Diretor que representa? | Compliance | ⏳ Pendente | Recomendação: **NÃO** |
 | 12 | Compartilhar template de e-mail de solicitação (Google Docs) | Setor de Viagens | ⏳ Pendente | — |
 | 13 | Compartilhar vouchers de exemplo para mapear campos do schema | Setor de Viagens | ⏳ Pendente | — |
-| 14 | Definir Deployment ID do GAS após primeiro deploy | TI + Dev | ⏳ Pendente | — |
-| 15 | Configurar Script Properties no GAS (SHEET_ID, PASTA_IDs, etc.) | Dev | ⏳ Pendente | — |
+| 14 | Definir Deployment ID do GAS após primeiro deploy | TI + Dev | ✅ Decidido | `AKfycbzi3Cy5rJ2pB2QH1B7p-d7HUw9xNPwF1pUrUS6lDRmznQ-Ss1X2js_YNr3wK6vBSTTh` |
+| 15 | Configurar Script Properties no GAS | Dev | ✅ Decidido | Todas as propriedades configuradas — pendente apenas `WEBAPP_URL` |
 | 16 | ~~Níveis hierárquicos numéricos no BQ~~ | TI + BQ | ✅ Decidido | Não existe campo `nivel_hierarquico` — detecção usa `assignee.superior` chain + cargo text-match |
 | 17 | ~~Quem no RH aprova exceções de quarto~~ | RH | 🚫 N/A MVP | **Aprovação RH descartada do MVP** — laudo sobe para Drive sem roteamento para RH |
 
@@ -47,6 +47,7 @@
 | D13 | Hierarquia resolvida via `assignee.superior → assignee.id` self-JOIN (dois níveis: N1 e N2) | 08/04/2026 | Dev |
 | D14 | Campo matrícula: `assignee.CUSTOM1 = CAST(mag_v_funcionarios_ativos.ID AS STRING)` | 08/04/2026 | TI / Dev |
 | D15 | Validação RH de laudos removida do MVP — laudo armazenado no Drive sem e-mail para RH | 08/04/2026 | Product |
+| D16 | WEBAPP\_URL: `https://script.google.com/macros/s/AKfycbzi3Cy5rJ2pB2QH1B7p-d7HUw9xNPwF1pUrUS6lDRmznQ-Ss1X2js_YNr3wK6vBSTTh/exec` | 08/04/2026 | Dev |
 
 ---
 
