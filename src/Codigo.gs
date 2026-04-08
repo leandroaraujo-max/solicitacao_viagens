@@ -12,6 +12,8 @@ function getConfig() {
     PASTA_LAUDOS_ID:        props.getProperty('PASTA_LAUDOS_ID'),
     PASTA_VOUCHERS_ID:      props.getProperty('PASTA_VOUCHERS_ID'),
     EMAIL_VIAGENS:          props.getProperty('EMAIL_VIAGENS'),
+    EMAIL_TASTUR:           props.getProperty('EMAIL_TASTUR'),
+    EMAIL_KONTRIP:          props.getProperty('EMAIL_KONTRIP'),
     BQ_PROJECT_ID:          props.getProperty('BQ_PROJECT_ID'),
     // Tabelas BQ reais confirmadas pelo time de dados
     BQ_TABLE_ASSIGNEE:      props.getProperty('BQ_TABLE_ASSIGNEE'),      // 'maga-bigdata.kirk.assignee'
