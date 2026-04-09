@@ -15,7 +15,10 @@
       <span class="logo-icon">✈</span>
       <span>Portal de Viagens</span>
     </div>
-    <span class="badge-magalu">Magalu</span>
+    <div style="display:flex;align-items:center;gap:12px">
+      <a href="https://drive.google.com/file/d/1SFxzQXkTSr36KR4xJLNwp6vNMCa9_Rrg/view" target="_blank" style="color:#FFCE00;font-size:12px;text-decoration:none" title="Política de Viagens">📄 Política de Viagens</a>
+      <span class="badge-magalu">Magalu</span>
+    </div>
   </div>
 </header>
 
@@ -40,19 +43,19 @@
     </div>
 
     <div class="field-group">
-      <label for="matriculaOperador">Sua matrícula <span class="req">*</span></label>
+      <label for="cpfOperador">Seu CPF <span class="req">*</span></label>
       <div class="input-row">
-        <input type="text" id="matriculaOperador" placeholder="Ex: 123456" maxlength="10" />
-        <button class="btn-secondary" onclick="buscarOperador()">Identificar</button>
+        <input type="text" id="cpfOperador" placeholder="000.000.000-00" maxlength="14" oninput="mascaraCPF(this)" />
+        <button class="btn-secondary" id="btnIdentificar" onclick="buscarOperador()">Identificar</button>
       </div>
       <div id="infoOperador" class="info-box hidden"></div>
     </div>
 
     <div id="secaoViajante" class="field-group hidden">
-      <label for="matriculaViajante">Matrícula do viajante <span class="req">*</span></label>
+      <label for="cpfViajante">CPF do viajante <span class="req">*</span></label>
       <div class="input-row">
-        <input type="text" id="matriculaViajante" placeholder="Matrícula do colaborador que irá viajar" maxlength="10" />
-        <button class="btn-secondary" onclick="buscarViajante()">Buscar</button>
+        <input type="text" id="cpfViajante" placeholder="CPF do colaborador que irá viajar" maxlength="14" oninput="mascaraCPF(this)" />
+        <button class="btn-secondary" id="btnBuscarViajante" onclick="buscarViajante()">Buscar</button>
       </div>
       <div id="infoViajante" class="info-box hidden"></div>
       <div id="alertaDelegacao" class="alert hidden"></div>
@@ -61,7 +64,7 @@
     <button class="btn-primary" id="btnAvancarViagem" disabled onclick="avancarParaViagem()">
       Avançar para dados da viagem →
     </button>
-  </div>
+  </div>  <!-- /step-identificacao -->
 
   <!-- Passo 2: Dados da Viagem -->
   <div id="step-viagem" class="card hidden">
@@ -69,13 +72,24 @@
 
     <div id="perfilViajante" class="perfil-box"></div>
 
+    <!-- Origem + Destino -->
+    <div class="grid-2">
+      <div class="field-group">
+        <label for="origemCidade">Origem (cidade) <span class="req">*</span></label>
+        <input type="text" id="origemCidade" placeholder="Ex: Campinas" />
+      </div>
+      <div class="field-group">
+        <label for="origemEstado">Estado origem</label>
+        <input type="text" id="origemEstado" placeholder="Ex: SP" maxlength="2" />
+      </div>
+    </div>
     <div class="grid-2">
       <div class="field-group">
         <label for="destino">Destino (cidade) <span class="req">*</span></label>
         <input type="text" id="destino" placeholder="Ex: Porto Alegre" />
       </div>
       <div class="field-group">
-        <label for="estado">Estado</label>
+        <label for="estado">Estado destino</label>
         <input type="text" id="estado" placeholder="Ex: RS" maxlength="2" />
       </div>
     </div>
@@ -86,26 +100,130 @@
         <input type="date" id="dataIda" onchange="calcularAntecedencia()" />
       </div>
       <div class="field-group">
-        <label for="dataVolta">Data de volta <span class="req">*</span></label>
+        <label for="dataVolta">Data de volta</label>
         <input type="date" id="dataVolta" />
       </div>
     </div>
 
     <div id="alertaAntecedencia" class="alert hidden"></div>
     <div id="badgeClassificacao" class="badge hidden"></div>
+    <div id="badgeDistancia" class="badge hidden"></div>
 
     <div class="field-group">
       <label>Serviços necessários <span class="req">*</span></label>
       <div class="check-group">
-        <label class="check-opt"><input type="checkbox" value="Aereo">      ✈ Aéreo</label>
-        <label class="check-opt"><input type="checkbox" value="Hospedagem"> 🏨 Hospedagem</label>
-        <label class="check-opt"><input type="checkbox" value="Carro">      🚗 Aluguel de carro</label>
+        <label class="check-opt"><input type="checkbox" value="Aereo" onchange="onServicoChange()">      ✈ Aéreo</label>
+        <label class="check-opt"><input type="checkbox" value="Rodoviario" onchange="onServicoChange()"> 🚌 Rodoviário</label>
+        <label class="check-opt"><input type="checkbox" value="Hospedagem" onchange="onServicoChange()"> 🏨 Hospedagem</label>
+        <label class="check-opt"><input type="checkbox" value="Carro" onchange="onServicoChange()">      🚗 Aluguel de carro</label>
+      </div>
+    </div>
+
+    <!-- Bloco Aéreo: período e tipo -->
+    <div id="blocoAereoOpcoes" class="card card-inner hidden">
+      <h3>✈ Preferências do Voo</h3>
+      <div class="grid-2">
+        <div class="field-group">
+          <label>Período preferido</label>
+          <div class="check-group">
+            <label class="check-opt"><input type="checkbox" name="periodoAereo" value="Manhã"> 🌅 Manhã (06h–12h)</label>
+            <label class="check-opt"><input type="checkbox" name="periodoAereo" value="Tarde"> ☀ Tarde (12h–18h)</label>
+            <label class="check-opt"><input type="checkbox" name="periodoAereo" value="Noite"> 🌙 Noite (18h–00h)</label>
+          </div>
+        </div>
+        <div class="field-group">
+          <label>Tipo de passagem</label>
+          <div class="radio-group">
+            <label class="radio-opt"><input type="radio" name="tipoPassagemAereo" value="Ida e Volta" checked> Ida e volta</label>
+            <label class="radio-opt"><input type="radio" name="tipoPassagemAereo" value="Somente Ida"> Somente ida</label>
+            <label class="radio-opt"><input type="radio" name="tipoPassagemAereo" value="Somente Volta"> Somente volta</label>
+          </div>
+        </div>
+      </div>
+      <div class="field-group">
+        <label class="check-opt destaque">
+          <input type="checkbox" id="chkBagagemExtra"> 🧳 Necessidade de despachar bagagem extra
+        </label>
+      </div>
+    </div>
+
+    <!-- Bloco Rodoviário -->
+    <div id="blocoRodoviario" class="card card-inner hidden">
+      <h3>🚌 Transporte Rodoviário</h3>
+      <div id="alertaLeito" class="alert alert-info hidden">
+        🌙 Partida entre 19h e 06h — é permitida a solicitação de <strong>ônibus leito</strong>.
+      </div>
+      <div class="grid-2">
+        <div class="field-group">
+          <label>Data e hora de partida <span class="req">*</span></label>
+          <input type="datetime-local" id="rodovIda" onchange="verificarAlertoLeito()" />
+        </div>
+        <div class="field-group">
+          <label>Data e hora de retorno</label>
+          <input type="datetime-local" id="rodovVolta" onchange="verificarAlertoLeito()" />
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="field-group">
+          <label>Período preferido</label>
+          <div class="check-group">
+            <label class="check-opt"><input type="checkbox" name="periodoRodov" value="Manhã"> 🌅 Manhã</label>
+            <label class="check-opt"><input type="checkbox" name="periodoRodov" value="Tarde"> ☀ Tarde</label>
+            <label class="check-opt"><input type="checkbox" name="periodoRodov" value="Noite"> 🌙 Noite</label>
+          </div>
+        </div>
+        <div class="field-group">
+          <label>Tipo de passagem</label>
+          <div class="radio-group">
+            <label class="radio-opt"><input type="radio" name="tipoPassagemRodov" value="Ida e Volta" checked> Ida e volta</label>
+            <label class="radio-opt"><input type="radio" name="tipoPassagemRodov" value="Somente Ida"> Somente ida</label>
+            <label class="radio-opt"><input type="radio" name="tipoPassagemRodov" value="Somente Volta"> Somente volta</label>
+          </div>
+        </div>
+      </div>
+      <div class="field-group">
+        <label>Tipo de ônibus</label>
+        <div class="radio-group">
+          <label class="radio-opt"><input type="radio" name="tipoOnibus" value="Convencional" checked> Convencional</label>
+          <label class="radio-opt" id="optLeito"><input type="radio" name="tipoOnibus" value="Leito"> Leito (noturno)</label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bloco Carro: campos completos -->
+    <div id="blocoCarroOpcoes" class="card card-inner hidden">
+      <h3>🚗 Locação de Veículo</h3>
+      <div class="grid-2">
+        <div class="field-group">
+          <label>Cidade/aeroporto de retirada <span class="req">*</span></label>
+          <input type="text" id="carroRetiradaLocal" placeholder="Ex: Aeroporto de Congonhas" />
+        </div>
+        <div class="field-group">
+          <label>Data e hora de retirada <span class="req">*</span></label>
+          <input type="datetime-local" id="carroRetiradaDT" />
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="field-group">
+          <label>Cidade/aeroporto de devolução <span class="req">*</span></label>
+          <input type="text" id="carroDevolucaoLocal" placeholder="Ex: Mesmo local de retirada" />
+        </div>
+        <div class="field-group">
+          <label>Data e hora de devolução <span class="req">*</span></label>
+          <input type="datetime-local" id="carroDevolucaoDT" />
+        </div>
       </div>
     </div>
 
     <div class="field-group">
       <label for="motivoViagem">Motivo da viagem <span class="req">*</span></label>
       <textarea id="motivoViagem" rows="3" placeholder="Ex: Reunião com cliente, treinamento, visita técnica..."></textarea>
+    </div>
+
+    <div class="field-group">
+      <label for="observacoesViajante">Observações e necessidades específicas</label>
+      <textarea id="observacoesViajante" rows="3" placeholder="Ex: Carro será retirado no 2° dia; viajante acima de 1,95m, prefere assento com mais espaço; voo de manhã cedo..."></textarea>
+      <span class="field-hint">Essas informações serão compartilhadas com as agências para a cotação.</span>
     </div>
 
     <!-- Bloco de hospedagem (aparece quando Hospedagem selecionado) -->
@@ -160,8 +278,8 @@
       <h3>👥 Viajantes adicionais (casamento de viagem)</h3>
       <p class="field-hint">Informe colegas com a mesma viagem para otimizar a cotação.</p>
       <div class="input-row">
-        <input type="text" id="matriculaColega" placeholder="Matrícula do colega" maxlength="10" />
-        <button class="btn-secondary" onclick="buscarColega()">Verificar compatibilidade</button>
+        <input type="text" id="matriculaColega" placeholder="CPF do colega" maxlength="14" oninput="mascaraCPF(this)" />
+        <button class="btn-secondary" id="btnVerificarColega" onclick="buscarColega()">Verificar compatibilidade</button>
       </div>
       <div id="infoColega" class="hidden"></div>
     </div>
@@ -251,9 +369,33 @@ const estado = {
   ehDelegacao: false,
   laudoBase64: null,
   laudoNome: null,
+  preferencia_voo: null,
+  preferencia_hotel: null,
+  iataOrigem: '',
+  iataDestino: '',
+  _voosResultados: [],
+  condicaoEspecialPreAprovada: false,
 };
 
-// ── Funções de navegação ─────────────────────────────────────
+// ── Utilitários ──────────────────────────────────────────────
+function mascaraCPF(el) {
+  let v = el.value.replace(/\D/g,'').slice(0,11);
+  if (v.length > 9) v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{0,2})/,'$1.$2.$3-$4');
+  else if (v.length > 6) v = v.replace(/(\d{3})(\d{3})(\d{0,3})/,'$1.$2.$3');
+  else if (v.length > 3) v = v.replace(/(\d{3})(\d{0,3})/,'$1.$2');
+  el.value = v;
+}
+
+function soCpf(v) { return v.replace(/\D/g,''); }
+
+function setBtn(id, loading, texto) {
+  const b = document.getElementById(id);
+  if (!b) return;
+  b.disabled = loading;
+  b.innerHTML = loading ? '<span class="btn-spin">⏳</span> Aguarde...' : texto;
+}
+
+// ── Navegação ────────────────────────────────────────────────
 function onTipoSolicitacao(radio) {
   estado.ehDelegacao = radio.value === 'delegado';
   document.getElementById('secaoViajante').classList.toggle('hidden', !estado.ehDelegacao);
@@ -271,58 +413,53 @@ function voltarParaIdentificacao() {
   document.getElementById('step-identificacao').classList.remove('hidden');
 }
 
-function novaSolicitacao() {
-  location.reload();
-}
+function novaSolicitacao() { location.reload(); }
 
 // ── Busca de colaboradores ────────────────────────────────────
 function buscarOperador() {
-  const mat = document.getElementById('matriculaOperador').value.trim();
-  if (!mat) return alertar('Informe sua matrícula.');
+  const cpf = soCpf(document.getElementById('cpfOperador').value);
+  if (cpf.length !== 11) return alertar('Informe um CPF válido (11 dígitos).');
+  setBtn('btnIdentificar', true, 'Identificar');
   setLoading('infoOperador', true);
   google.script.run
     .withSuccessHandler(r => {
+      setBtn('btnIdentificar', false, 'Identificar');
       try {
-        console.log('[buscarOperador] resposta:', JSON.stringify(r));
-        if (!r || !r.sucesso) {
-          setErro('infoOperador', (r && r.erro) || 'Erro ao buscar matrícula. Tente novamente.');
-          return;
-        }
+        if (!r || !r.sucesso) { setErro('infoOperador', (r && r.erro) || 'CPF não encontrado.'); return; }
         onOperadorEncontrado(r.dados);
-      } catch (ex) {
-        console.error('[buscarOperador] erro no handler:', ex);
-        setErro('infoOperador', 'Erro interno: ' + ex.message);
-      }
+      } catch(ex) { setErro('infoOperador', 'Erro interno: ' + ex.message); }
     })
     .withFailureHandler(e => {
-      console.error('[buscarOperador] failure:', e);
+      setBtn('btnIdentificar', false, 'Identificar');
       setErro('infoOperador', e.message || 'Falha na comunicação com o servidor.');
     })
-    .doPost_proxy({ acao: 'buscarViajante', matricula: mat });
+    .doPost_proxy({ acao: 'buscarViajante', cpf });
 }
 
 function onOperadorEncontrado(viajante) {
   estado.operador = viajante;
   const el = document.getElementById('infoOperador');
   el.innerHTML = `<strong>${viajante.nome}</strong> | ${viajante.cargo} | ${viajante.filial}`;
-  el.classList.remove('hidden', 'erro');
-  if (!estado.ehDelegacao) {
-    estado.viajante = viajante;
-    checarPodeAvancar();
-  }
+  el.classList.remove('hidden','erro');
+  if (!estado.ehDelegacao) { estado.viajante = viajante; checarPodeAvancar(); }
 }
 
 function buscarViajante() {
-  const mat = document.getElementById('matriculaViajante').value.trim();
-  const matOp = document.getElementById('matriculaOperador').value.trim();
-  if (!mat) return alertar('Informe a matrícula do viajante.');
+  const cpfViajante = soCpf(document.getElementById('cpfViajante').value);
+  const cpfOp = soCpf(document.getElementById('cpfOperador').value);
+  if (cpfViajante.length !== 11) return alertar('Informe um CPF válido para o viajante.');
+  setBtn('btnBuscarViajante', true, 'Buscar');
   google.script.run
     .withSuccessHandler(r => {
+      setBtn('btnBuscarViajante', false, 'Buscar');
       if (!r.sucesso) { setErro('alertaDelegacao', r.erro); return; }
       onViajanteEncontrado(r.dados.viajante, r.dados.delegacao);
     })
-    .withFailureHandler(e => setErro('alertaDelegacao', e.message))
-    .doPost_proxy({ acao: 'validarDelegacao', matriculaOperador: matOp, matriculaViajante: mat });
+    .withFailureHandler(e => {
+      setBtn('btnBuscarViajante', false, 'Buscar');
+      setErro('alertaDelegacao', e.message);
+    })
+    .doPost_proxy({ acao: 'validarDelegacao', cpfOperador: cpfOp, cpfViajante });
 }
 
 function onViajanteEncontrado(viajante, delegacao) {
@@ -332,20 +469,39 @@ function onViajanteEncontrado(viajante, delegacao) {
     🏨 Hospedagem: <strong>${viajante.categoria_hospedagem}</strong> — ${viajante.motivo_categoria_hosp}<br>
     🚗 Veículo: <strong>${viajante.categoria_veiculo}</strong> — ${viajante.motivo_categoria_veic}`;
   el.classList.remove('hidden');
+
+  // E3: verifica condição especial já validada
+  estado.condicaoEspecialPreAprovada = false;
+  const temCondicao = viajante.sono_disturbio || viajante.mobilidade_restrita || viajante.outra_condicao;
+  const laudoValido = viajante.sono_validade && new Date(viajante.sono_validade) > new Date();
+  if (temCondicao && laudoValido) {
+    estado.condicaoEspecialPreAprovada = true;
+    const badge = document.createElement('div');
+    badge.className = 'info-box';
+    badge.style.background = '#e8f5e9';
+    badge.innerHTML = '✅ Condição especial validada — quarto individual já aprovado.';
+    el.appendChild(badge);
+  }
+
   checarPodeAvancar();
 }
 
 function buscarColega() {
-  const mat = document.getElementById('matriculaColega').value.trim();
-  const matV = estado.viajante?.matricula;
-  if (!mat || !matV) return;
+  const cpfColega = soCpf(document.getElementById('matriculaColega').value);
+  const cpfVia = soCpf(document.getElementById('cpfViajante')?.value || document.getElementById('cpfOperador').value);
+  if (cpfColega.length !== 11) return;
+  setBtn('btnVerificarColega', true, 'Verificar compatibilidade');
   google.script.run
     .withSuccessHandler(r => {
+      setBtn('btnVerificarColega', false, 'Verificar compatibilidade');
       if (!r.sucesso) { console.error('[buscarColega]', r.erro); return; }
       renderizarCompatibilidadeColega(r.dados);
     })
-    .withFailureHandler(e => console.error(e))
-    .doPost_proxy({ acao: 'buscarCompatibildade', matriculaColega: mat, matriculaViajante: matV });
+    .withFailureHandler(e => {
+      setBtn('btnVerificarColega', false, 'Verificar compatibilidade');
+      console.error(e);
+    })
+    .doPost_proxy({ acao: 'buscarCompatibildade', cpfColega, cpfViajante: cpfVia });
 }
 
 function renderizarCompatibilidadeColega(dados) {
@@ -353,25 +509,22 @@ function renderizarCompatibilidadeColega(dados) {
   el.innerHTML = `
     <div class="info-box" style="margin-top:8px">
       <strong>${dados.nome}</strong> | ${dados.cargo} | CC: ${dados.centro_custo}<br>
-      🏨 Compatibilidade quarto: <strong>${dados.compat_quarto ? '✅ Compartilhado' : '⚠ ' + dados.motivo_hosp_colega}</strong><br>
-      🚗 Compatibilidade veículo: <strong>${dados.compat_veiculo ? '✅ Compartilhado' : '⚠ ' + dados.motivo_veic_colega}</strong>
+      🏨 Compat. quarto: <strong>${dados.compat_quarto ? '✅ Compartilhado' : '⚠ ' + dados.motivo_hosp_colega}</strong><br>
+      🚗 Compat. veículo: <strong>${dados.compat_veiculo ? '✅ Compartilhado' : '⚠ ' + dados.motivo_veic_colega}</strong>
     </div>`;
   el.classList.remove('hidden');
 }
 
-// ── Cálculos de antecedência ─────────────────────────────────
+// ── Antecedência e distância ─────────────────────────────────
 function calcularAntecedencia() {
   const dataIda = new Date(document.getElementById('dataIda').value);
   const agora   = new Date();
   const dias    = Math.floor((dataIda - agora) / 86400000);
   const badge   = document.getElementById('badgeClassificacao');
   const alerta  = document.getElementById('alertaAntecedencia');
-
   if (isNaN(dias)) return;
-
-  badge.classList.remove('hidden', 'badge-comum', 'badge-emergencial');
+  badge.classList.remove('hidden','badge-comum','badge-emergencial');
   alerta.classList.add('hidden');
-
   if (dias < 0) {
     alerta.textContent = '❌ A data de ida não pode ser no passado.';
     alerta.classList.remove('hidden');
@@ -384,6 +537,84 @@ function calcularAntecedencia() {
     badge.textContent = `✅ Aéreo Comum — ${dias} dias de antecedência`;
     badge.classList.add('badge-comum');
   }
+  // Tenta calcular distância automaticamente
+  tentarCalcularDistancia();
+}
+
+let _distTimer;
+function tentarCalcularDistancia() {
+  clearTimeout(_distTimer);
+  const origem  = document.getElementById('origemCidade').value.trim();
+  const destino = document.getElementById('destino').value.trim();
+  const badge   = document.getElementById('badgeDistancia');
+  if (!origem || !destino) { badge.classList.add('hidden'); return; }
+  _distTimer = setTimeout(() => calcularDistancia(origem, destino), 800);
+}
+
+function calcularDistancia(origem, destino) {
+  google.script.run
+    .withSuccessHandler(r => {
+      const badge = document.getElementById('badgeDistancia');
+      if (!r || !r.sucesso) { badge.classList.add('hidden'); return; }
+      const km = r.distanciaKm;
+      estado.distanciaKm = km;
+      estado.aereoElegivel = km >= 400;
+      badge.classList.remove('hidden','badge-comum','badge-emergencial');
+      if (km >= 400) {
+        badge.textContent = `✅ Distância: ~${km} km — Aéreo elegível`;
+        badge.className = 'badge badge-comum';
+      } else {
+        badge.textContent = `⚠ Distância: ~${km} km — Aéreo não recomendado (mín. 400 km)`;
+        badge.className = 'badge badge-emergencial';
+      }
+    })
+    .withFailureHandler(() => document.getElementById('badgeDistancia').classList.add('hidden'))
+    .doPost_proxy({ acao: 'calcularDistancia', origem, destino });
+}
+
+// ── Serviços ─────────────────────────────────────────────────
+function onServicoChange() {
+  const servicos = [...document.querySelectorAll('.check-group input[type=checkbox]:checked')].map(c => c.value);
+  const temAereo     = servicos.includes('Aereo');
+  const temRodov     = servicos.includes('Rodoviario');
+  const temHosp      = servicos.includes('Hospedagem');
+  const temCarro     = servicos.includes('Carro');
+
+  document.getElementById('blocoAereoOpcoes').classList.toggle('hidden', !temAereo);
+  document.getElementById('blocoRodoviario').classList.toggle('hidden', !temRodov);
+  document.getElementById('blocoCarroOpcoes').classList.toggle('hidden', !temCarro);
+  document.getElementById('blocoHospedagem').classList.toggle('hidden', !temHosp);
+
+  if (temHosp && estado.viajante?.categoria_hospedagem === 'Compartilhado') {
+    const bloco = document.getElementById('blocoExcecaoSaude');
+    if (bloco) {
+      if (estado.condicaoEspecialPreAprovada) {
+        bloco.classList.add('hidden');
+      } else {
+        bloco.classList.remove('hidden');
+      }
+    }
+  }
+
+  document.getElementById('secaoBuscaVoo').classList.toggle('hidden', !temAereo);
+  document.getElementById('secaoBuscaHotel').classList.toggle('hidden', !temHosp);
+
+  // valida aéreo vs distância
+  if (temAereo && estado.distanciaKm != null && estado.distanciaKm < 400) {
+    alertar(`⚠ Distância de ${estado.distanciaKm} km — Aéreo não recomendado para viagens abaixo de 400 km. Considere o transporte rodoviário.`);
+  }
+
+  tentarCalcularDistancia();
+}
+
+// ── Alerta ônibus leito (D2) ─────────────────────────────────
+function verificarAlertoLeito() {
+  const dt = document.getElementById('rodovIda').value;
+  if (!dt) return;
+  const hora = new Date(dt).getHours();
+  const noturno = hora >= 19 || hora < 6;
+  document.getElementById('alertaLeito').classList.toggle('hidden', !noturno);
+  document.getElementById('optLeito').style.display = noturno ? '' : '';  // sempre visível
 }
 
 // ── Exceção de saúde ─────────────────────────────────────────
@@ -396,48 +627,25 @@ function validarLaudo(input) {
   const file   = input.files[0];
   const status = document.getElementById('laudoStatus');
   estado.laudoBase64 = null;
-
   if (!file) return;
   if (file.type !== 'application/pdf') {
-    status.textContent = '❌ Apenas arquivos PDF são aceitos.';
-    status.style.color = '#e53935';
-    input.value = '';
-    return;
+    status.textContent = '❌ Apenas PDF.'; status.style.color='#e53935'; input.value=''; return;
   }
-  if (file.size > 5 * 1024 * 1024) {
-    status.textContent = '❌ O arquivo não pode ultrapassar 5 MB.';
-    status.style.color = '#e53935';
-    input.value = '';
-    return;
+  if (file.size > 5*1024*1024) {
+    status.textContent = '❌ Máx 5 MB.'; status.style.color='#e53935'; input.value=''; return;
   }
-
   const reader = new FileReader();
   reader.onload = e => {
     estado.laudoBase64 = e.target.result.split(',')[1];
     estado.laudoNome   = file.name;
-    status.textContent = `✅ ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+    status.textContent = `✅ ${file.name} (${(file.size/1024).toFixed(1)} KB)`;
     status.style.color = '#2e7d32';
     checarPodeSubmeter();
   };
   reader.readAsDataURL(file);
 }
 
-// ── Serviços selecionados ─────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
-  document.querySelectorAll('.check-group input').forEach(chk => {
-    chk.addEventListener('change', () => {
-      const temHosp = [...document.querySelectorAll('.check-group input:checked')]
-        .some(c => c.value === 'Hospedagem');
-      document.getElementById('blocoHospedagem').classList.toggle('hidden', !temHosp);
-      // Exibe opção de exceção somente para quem tem categoria Compartilhado
-      if (estado.viajante?.categoria_hospedagem === 'Compartilhado') {
-        document.getElementById('blocoExcecaoSaude').classList.toggle('hidden', !temHosp);
-      }
-    });
-  });
-});
-
-// ── Renderizações ─────────────────────────────────────────────
+// ── Perfil viajante ──────────────────────────────────────────
 function renderizarPerfilViajante() {
   const v  = estado.viajante;
   const el = document.getElementById('perfilViajante');
@@ -446,8 +654,8 @@ function renderizarPerfilViajante() {
       <span><label>Viajante</label><strong>${v.nome}</strong></span>
       <span><label>Cargo</label>${v.cargo}</span>
       <span><label>Filial</label>${v.filial}</span>
-      <span><label>CC</label>${v.centro_custo}</span>
-      <span><label>🏨 Hospedagem</label><strong class="${v.categoria_hospedagem === 'Individual' ? 'txt-individual' : ''}">${v.categoria_hospedagem}</strong></span>
+      <span><label>Centro de Custo</label>${v.centro_custo}${v.cod_centro_custo ? ' <em>('+v.cod_centro_custo+')</em>' : ''}</span>
+      <span><label>🏨 Hospedagem</label><strong class="${v.categoria_hospedagem==='Individual'?'txt-individual':''}">${v.categoria_hospedagem}</strong></span>
       <span><label>🚗 Veículo</label><strong>${v.categoria_veiculo}</strong></span>
     </div>`;
   document.getElementById('categoriaHospedagem').textContent =
@@ -456,80 +664,91 @@ function renderizarPerfilViajante() {
 
 // ── Submissão ─────────────────────────────────────────────────
 function submeterSolicitacao() {
-  const servicos = [...document.querySelectorAll('.check-group input:checked')].map(c => c.value);
+  const servicos = [...document.querySelectorAll('.check-group input[type=checkbox]:checked')].map(c => c.value);
   if (!servicos.length) return alertar('Selecione ao menos um serviço.');
 
-  const temExcecao = document.getElementById('chkExcecao')?.checked;
+  // Validação distância vs aéreo
+  if (servicos.includes('Aereo') && estado.distanciaKm != null && estado.distanciaKm < 400) {
+    if (!confirm(`Distância estimada de ${estado.distanciaKm} km — menor que 400 km. Confirma solicitação de aéreo mesmo assim?`)) return;
+  }
+
+  const temExcecao = document.getElementById('chkExcecao')?.checked && !estado.condicaoEspecialPreAprovada;
   if (temExcecao && !estado.laudoBase64) return alertar('O laudo médico em PDF é obrigatório para a exceção de quarto individual.');
 
+  const getPeriodo = (name) => [...document.querySelectorAll(`input[name="${name}"]:checked`)].map(i=>i.value).join(', ');
+  const getRadio   = (name) => (document.querySelector(`input[name="${name}"]:checked`) || {}).value || '';
+
+  const cpfViajante = soCpf(estado.viajante.cpf || document.getElementById('cpfViajante')?.value || document.getElementById('cpfOperador').value);
+
   const payload = {
-    acao:                 'submeterSolicitacao',
-    matricula_viajante:   estado.viajante.matricula,
-    matricula_operador:   estado.operador?.matricula || estado.viajante.matricula,
-    nome_operador:        estado.operador?.nome      || estado.viajante.nome,
-    via_delegacao:        estado.ehDelegacao,
-    destino_cidade:       document.getElementById('destino').value.trim(),
-    destino_estado:       document.getElementById('estado').value.trim(),
-    data_ida:             document.getElementById('dataIda').value,
-    data_volta:           document.getElementById('dataVolta').value,
-    tipo_servico:         servicos,
-    motivo_viagem:        document.getElementById('motivoViagem').value.trim(),
-    quarto_excecao_saude: temExcecao || false,
-    excecao_motivo:       temExcecao ? document.getElementById('excecaoMotivo').value : '',
-    excecao_cid:          temExcecao ? document.getElementById('excecaoCID').value    : '',
-    excecao_validade:     temExcecao ? document.getElementById('excecaoValidade').value : '',
-    excecao_obs:          temExcecao ? document.getElementById('excecaoObs').value    : '',
-    laudoBase64:          estado.laudoBase64 || null,
-    laudoNome:            estado.laudoNome   || null,
-    // Preferências selecionadas na busca Amadeus (opcionais)
+    acao:                    'submeterSolicitacao',
+    cpf_viajante:            cpfViajante,
+    matricula_viajante:      estado.viajante.matricula || '',
+    matricula_operador:      estado.operador?.matricula || estado.viajante.matricula || '',
+    nome_operador:           estado.operador?.nome      || estado.viajante.nome,
+    via_delegacao:           estado.ehDelegacao,
+    // A1 — origem
+    origem_cidade:           document.getElementById('origemCidade').value.trim(),
+    origem_estado:           document.getElementById('origemEstado').value.trim().toUpperCase(),
+    // destino
+    destino_cidade:          document.getElementById('destino').value.trim(),
+    destino_estado:          document.getElementById('estado').value.trim().toUpperCase(),
+    data_ida:                document.getElementById('dataIda').value,
+    data_volta:              document.getElementById('dataVolta').value,
+    tipo_servico:            servicos,
+    motivo_viagem:           document.getElementById('motivoViagem').value.trim(),
+    // A2 — observações
+    observacoes_viajante:    document.getElementById('observacoesViajante').value.trim(),
+    // A3 — bagagem extra
+    bagagem_extra:           document.getElementById('chkBagagemExtra')?.checked || false,
+    // A4 — período/tipo aéreo
+    aereo_periodo_preferido: getPeriodo('periodoAereo'),
+    aereo_tipo_trecho:       getRadio('tipoPassagemAereo'),
+    // A5 — rodoviário
+    rodov_data_ida:          document.getElementById('rodovIda')?.value || '',
+    rodov_data_volta:        document.getElementById('rodovVolta')?.value || '',
+    rodov_periodo_preferido: getPeriodo('periodoRodov'),
+    rodov_tipo_trecho:       getRadio('tipoPassagemRodov'),
+    rodov_tipo_onibus:       getRadio('tipoOnibus'),
+    // A6 — carro completo
+    carro_cidade_retirada:   document.getElementById('carroRetiradaLocal')?.value.trim() || '',
+    carro_hora_retirada:     document.getElementById('carroRetiradaDT')?.value || '',
+    carro_cidade_devolucao:  document.getElementById('carroDevolucaoLocal')?.value.trim() || '',
+    carro_hora_devolucao:    document.getElementById('carroDevolucaoDT')?.value || '',
+    // D1 — distância
+    distancia_km:            estado.distanciaKm || '',
+    aereo_elegivel:          estado.aereoElegivel != null ? (estado.aereoElegivel ? 'Sim' : 'Não') : '',
+    // exceção saúde
+    quarto_excecao_saude:    temExcecao || estado.condicaoEspecialPreAprovada || false,
+    excecao_pre_aprovada:    estado.condicaoEspecialPreAprovada || false,
+    excecao_motivo:          temExcecao ? document.getElementById('excecaoMotivo').value : (estado.viajante.excecao_motivo || ''),
+    excecao_cid:             temExcecao ? document.getElementById('excecaoCID').value    : (estado.viajante.sono_cid || ''),
+    excecao_validade:        temExcecao ? document.getElementById('excecaoValidade').value : (estado.viajante.sono_validade || ''),
+    excecao_obs:             temExcecao ? document.getElementById('excecaoObs').value    : '',
+    laudoBase64:             estado.laudoBase64 || null,
+    laudoNome:               estado.laudoNome   || null,
+    // preferências Duffel
     ...(estado.preferencia_voo   || {}),
     ...(estado.preferencia_hotel || {}),
   };
 
-  document.getElementById('btnSubmeter').disabled = true;
-  document.getElementById('btnSubmeter').textContent = 'Enviando...';
-
+  setBtn('btnSubmeter', true, 'Enviar solicitação ✓');
   google.script.run
     .withSuccessHandler(r => {
-      if (!r.sucesso) {
-        alertar(r.erro || 'Erro ao enviar solicitação.');
-        document.getElementById('btnSubmeter').disabled = false;
-        document.getElementById('btnSubmeter').textContent = 'Enviar solicitação ✓';
-        return;
-      }
+      setBtn('btnSubmeter', false, 'Enviar solicitação ✓');
+      if (!r.sucesso) { alertar(r.erro || 'Erro ao enviar.'); return; }
       document.getElementById('step-viagem').classList.add('hidden');
       document.getElementById('step-protocolo').classList.remove('hidden');
       document.getElementById('protocoloGerado').textContent = r.dados.reqID;
     })
     .withFailureHandler(e => {
+      setBtn('btnSubmeter', false, 'Enviar solicitação ✓');
       alertar(e.message);
-      document.getElementById('btnSubmeter').disabled = false;
-      document.getElementById('btnSubmeter').textContent = 'Enviar solicitação ✓';
     })
     .doPost_proxy(payload);
 }
 
-// ── Amadeus — Preferências de voo e hotel ────────────────────
-// Estado das preferências selecionadas
-estado.preferencia_voo   = null;
-estado.preferencia_hotel = null;
-estado.iataOrigem  = '';
-estado.iataDestino = '';
-
-// Exibe blocos de busca Amadeus conforme serviços selecionados
-document.addEventListener('DOMContentLoaded', () => {
-  document.querySelectorAll('.check-group input').forEach(chk => {
-    chk.addEventListener('change', atualizarBlocosAmadeus);
-  });
-});
-
-function atualizarBlocosAmadeus() {
-  const servicos = [...document.querySelectorAll('.check-group input:checked')].map(c => c.value);
-  document.getElementById('secaoBuscaVoo').classList.toggle('hidden',   !servicos.includes('Aereo'));
-  document.getElementById('secaoBuscaHotel').classList.toggle('hidden', !servicos.includes('Hospedagem'));
-}
-
-// Debounce para autocomplete IATA
+// ── Amadeus / Duffel ─────────────────────────────────────────
 let _iataTimers = {};
 function debounceIATA(input, sugId) {
   clearTimeout(_iataTimers[sugId]);
@@ -544,93 +763,76 @@ function buscarIATA(termo, inputId, sugId) {
       if (!r.sucesso || !r.locais.length) return;
       const el = document.getElementById(sugId);
       el.innerHTML = r.locais.map(l =>
-        `<div class="amadeus-sug-item" onclick="selecionarIATA('${l.iataCode}','${l.cidade || l.nome}','${inputId}','${sugId}')">
-          <strong>${l.iataCode}</strong> — ${l.cidade || l.nome} (${l.pais || ''}) <em>${l.tipo}</em>
-        </div>`
-      ).join('');
+        `<div class="amadeus-sug-item" onclick="selecionarIATA('${l.iataCode}','${l.cidade||l.nome}','${inputId}','${sugId}')">
+          <strong>${l.iataCode}</strong> — ${l.cidade||l.nome} (${l.pais||''}) <em>${l.tipo}</em>
+        </div>`).join('');
       el.classList.remove('hidden');
     })
-    .withFailureHandler(() => {})
+    .withFailureHandler(()=>{})
     .doPost_proxy({ acao: 'buscarLocaisAmadeus', termo });
 }
 
 function selecionarIATA(iata, cidade, inputId, sugId) {
   document.getElementById(inputId).value = cidade;
   document.getElementById(sugId).classList.add('hidden');
-  if (inputId === 'amadeusOrigem') {
-    estado.iataOrigem = iata;
-    document.getElementById('amadeusOrigemIATA').textContent = iata;
-  } else {
-    estado.iataDestino = iata;
-    document.getElementById('amadeusDestinoIATA').textContent = iata;
-  }
+  if (inputId === 'amadeusOrigem') { estado.iataOrigem = iata; document.getElementById('amadeusOrigemIATA').textContent = iata; }
+  else { estado.iataDestino = iata; document.getElementById('amadeusDestinoIATA').textContent = iata; }
 }
 
 function buscarVoos() {
   const origem  = estado.iataOrigem  || document.getElementById('amadeusOrigem').value.trim().toUpperCase();
   const destino = estado.iataDestino || document.getElementById('amadeusDestino').value.trim().toUpperCase();
-  const dataIda  = document.getElementById('dataIda').value;
+  const dataIda   = document.getElementById('dataIda').value;
   const dataVolta = document.getElementById('dataVolta').value;
-  if (!origem || !destino) return alertar('Informe a origem e o destino para buscar voos.');
+  if (!origem || !destino) return alertar('Informe origem e destino para buscar voos.');
   if (!dataIda) return alertar('Informe a data de ida antes de buscar voos.');
-
   document.getElementById('resultadosVoos').classList.add('hidden');
   document.getElementById('loadingVoos').classList.remove('hidden');
-  document.getElementById('btnBuscarVoos').disabled = true;
-
+  setBtn('btnBuscarVoos', true, '🔍 Buscar voos');
   google.script.run
     .withSuccessHandler(r => {
       document.getElementById('loadingVoos').classList.add('hidden');
-      document.getElementById('btnBuscarVoos').disabled = false;
-      if (!r.sucesso) { alertar('Erro na busca de voos: ' + r.erro); return; }
+      setBtn('btnBuscarVoos', false, '🔍 Buscar voos');
+      if (!r.sucesso) { alertar('Erro na busca: ' + r.erro); return; }
       renderizarVoos(r.opcoes);
     })
     .withFailureHandler(e => {
       document.getElementById('loadingVoos').classList.add('hidden');
-      document.getElementById('btnBuscarVoos').disabled = false;
-      alertar('Falha ao buscar voos: ' + e.message);
+      setBtn('btnBuscarVoos', false, '🔍 Buscar voos');
+      alertar('Falha: ' + e.message);
     })
-    .doPost_proxy({ acao: 'buscarVoosAmadeus', origem, destino, dataIda, dataVolta: dataVolta || null });
+    .doPost_proxy({ acao: 'buscarVoosAmadeus', origem, destino, dataIda, dataVolta: dataVolta||null });
 }
 
 function renderizarVoos(opcoes) {
   const el = document.getElementById('resultadosVoos');
-  if (!opcoes.length) { el.innerHTML = '<p class="field-hint">Nenhum voo encontrado para os critérios informados.</p>'; el.classList.remove('hidden'); return; }
-  const fmt = iso => {
-    if (!iso) return '—';
-    const d = new Date(iso);
-    return d.toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
-  };
-  const fmtDur = iso => iso ? iso.replace('PT','').replace('H','h ').replace('M','min') : '';
-  el.innerHTML = '<p class="field-hint" style="margin-bottom:8px">Clique para selecionar sua preferência:</p>'
-    + opcoes.map((v, i) => `
+  if (!opcoes.length) { el.innerHTML='<p class="field-hint">Nenhum voo encontrado.</p>'; el.classList.remove('hidden'); return; }
+  const fmt  = iso => iso ? new Date(iso).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
+  const fDur = iso => iso ? iso.replace('PT','').replace('H','h ').replace('M','min') : '';
+  el.innerHTML = '<p class="field-hint" style="margin-bottom:8px">Clique para selecionar:</p>'
+    + opcoes.map((v,i)=>`
     <div class="amadeus-card" onclick="selecionarVoo(${i})" id="voo-card-${i}">
       <div style="display:flex;justify-content:space-between;align-items:center">
-        <span><strong>${v.cia_nome || v.cia_codigo}</strong> ${v.numero_voo}</span>
+        <span><strong>${v.cia_nome||v.cia_codigo}</strong> ${v.numero_voo}</span>
         <span class="amadeus-preco">R$ ${v.valor.toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
       </div>
       <div style="font-size:13px;color:#555;margin-top:4px">
-        ${fmt(v.saida)} → ${fmt(v.chegada)} &nbsp;|&nbsp; ${fmtDur(v.duracao)}
-        &nbsp;|&nbsp; ${v.paradas === 0 ? '<span style="color:#2e7d32">direto</span>' : v.paradas + ' parada(s)'}
-        &nbsp;|&nbsp; ${v.bagagem ? '✅ bagagem inclusa' : '❌ sem bagagem'}
-        &nbsp;|&nbsp; ${v.classe}
+        ${fmt(v.saida)} → ${fmt(v.chegada)} | ${fDur(v.duracao)}
+        | ${v.paradas===0?'<span style="color:#2e7d32">direto</span>':v.paradas+' parada(s)'}
+        | ${v.bagagem?'✅ bagagem':'❌ sem bagagem'} | ${v.classe}
       </div>
     </div>`).join('');
   el.classList.remove('hidden');
-  // guarda opções no estado para seleção
   estado._voosResultados = opcoes;
 }
 
 function selecionarVoo(idx) {
   const v = estado._voosResultados[idx];
   if (!v) return;
-  // Destaca card selecionado
   document.querySelectorAll('.amadeus-card').forEach(c => c.classList.remove('amadeus-card-ativo'));
-  const card = document.getElementById('voo-card-' + idx);
-  if (card) card.classList.add('amadeus-card-ativo');
-
+  document.getElementById('voo-card-'+idx)?.classList.add('amadeus-card-ativo');
   estado.preferencia_voo = {
-    preferencia_voo_cia:     v.cia_nome || v.cia_codigo,
+    preferencia_voo_cia:     v.cia_nome||v.cia_codigo,
     preferencia_voo_numero:  v.numero_voo,
     preferencia_voo_saida:   v.saida,
     preferencia_voo_chegada: v.chegada,
@@ -638,10 +840,9 @@ function selecionarVoo(idx) {
     preferencia_voo_bagagem: v.bagagem,
     preferencia_voo_valor:   v.valor,
   };
-
   const fmt = iso => new Date(iso).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
   document.getElementById('vooSelecionado').innerHTML =
-    `<div class="amadeus-selecionado-badge">✅ Voo preferencial: <strong>${v.cia_nome || v.cia_codigo} ${v.numero_voo}</strong> — ${fmt(v.saida)} → ${fmt(v.chegada)} — R$ ${v.valor.toLocaleString('pt-BR',{minimumFractionDigits:2})} <a href="#" onclick="limparVoo();return false" style="margin-left:8px;color:#e53935;font-size:12px">✕ remover</a></div>`;
+    `<div class="amadeus-selecionado-badge">✅ <strong>${v.cia_nome||v.cia_codigo} ${v.numero_voo}</strong> — ${fmt(v.saida)} → ${fmt(v.chegada)} — R$ ${v.valor.toLocaleString('pt-BR',{minimumFractionDigits:2})} <a href="#" onclick="limparVoo();return false" style="margin-left:8px;color:#e53935;font-size:12px">✕</a></div>`;
   document.getElementById('vooSelecionado').classList.remove('hidden');
 }
 
@@ -655,51 +856,25 @@ function confirmarHotel() {
   const nome = document.getElementById('hotelNomePref').value.trim();
   if (!nome) return alertar('Informe o nome do hotel de preferência.');
   const estrelas = document.getElementById('hotelEstrelasPref').value;
-
   estado.preferencia_hotel = {
     preferencia_hotel_nome:     nome,
-    preferencia_hotel_estrelas: estrelas || '',
+    preferencia_hotel_estrelas: estrelas||'',
     preferencia_hotel_diaria:   '',
     preferencia_hotel_total:    '',
   };
-
   document.getElementById('hotelSelecionado').innerHTML =
-    `<div class="amadeus-selecionado-badge">✅ Hotel preferencial: <strong>${nome}</strong>${estrelas ? ' — ' + estrelas + ' ★' : ''} <a href="#" onclick="limparHotel();return false" style="margin-left:8px;color:#e53935;font-size:12px">✕ remover</a></div>`;
+    `<div class="amadeus-selecionado-badge">✅ <strong>${nome}</strong>${estrelas?' — '+estrelas+' ★':''} <a href="#" onclick="limparHotel();return false" style="margin-left:8px;color:#e53935;font-size:12px">✕</a></div>`;
   document.getElementById('hotelSelecionado').classList.remove('hidden');
 }
 
 function limparHotel() {
   estado.preferencia_hotel = null;
   document.getElementById('hotelSelecionado').classList.add('hidden');
-  document.getElementById('hotelNomePref').value = '';
-  document.getElementById('hotelEstrelasPref').value = '';
+  document.getElementById('hotelNomePref').value='';
+  document.getElementById('hotelEstrelasPref').value='';
 }
 
-
-  document.getElementById('btnSubmeter').disabled = true;
-  document.getElementById('btnSubmeter').textContent = 'Enviando...';
-
-  google.script.run
-    .withSuccessHandler(r => {
-      if (!r.sucesso) {
-        alertar(r.erro || 'Erro ao enviar solicitação.');
-        document.getElementById('btnSubmeter').disabled = false;
-        document.getElementById('btnSubmeter').textContent = 'Enviar solicitação ✓';
-        return;
-      }
-      document.getElementById('step-viagem').classList.add('hidden');
-      document.getElementById('step-protocolo').classList.remove('hidden');
-      document.getElementById('protocoloGerado').textContent = r.dados.reqID;
-    })
-    .withFailureHandler(e => {
-      alertar(e.message);
-      document.getElementById('btnSubmeter').disabled = false;
-      document.getElementById('btnSubmeter').textContent = 'Enviar solicitação ✓';
-    })
-    .doPost_proxy(payload);
-}
-
-// ── Guardas e helpers UI ──────────────────────────────────────
+// ── Guardas UI ────────────────────────────────────────────────
 function checarPodeAvancar() {
   const ok = estado.operador && (estado.ehDelegacao ? !!estado.viajante : true);
   document.getElementById('btnAvancarViagem').disabled = !ok;
@@ -707,13 +882,14 @@ function checarPodeAvancar() {
 
 function checarPodeSubmeter() {
   const temExcecao = document.getElementById('chkExcecao')?.checked;
-  const laudoOk    = !temExcecao || !!estado.laudoBase64;
+  const laudoOk    = !temExcecao || !!estado.laudoBase64 || estado.condicaoEspecialPreAprovada;
   document.getElementById('btnSubmeter').disabled = !laudoOk;
 }
 
 function setLoading(id, on) {
-  document.getElementById(id).innerHTML = on ? '<em>Buscando...</em>' : '';
-  document.getElementById(id).classList.remove('hidden');
+  const el = document.getElementById(id);
+  el.innerHTML = on ? '<em>Buscando...</em>' : '';
+  el.classList.remove('hidden');
 }
 
 function setErro(id, msg) {
@@ -725,10 +901,14 @@ function setErro(id, msg) {
 
 function alertar(msg) { alert(msg); }
 
-// Nota: doPost_proxy NÃO é chamada diretamente aqui.
-// google.script.run.doPost_proxy(payload) invoca a função
-// homônima definida no servidor (Codigo.gs). Este stub
-// existe apenas para evitar erros caso seja referenciada.
+// Gatilho para calcular distância ao alterar campos de origem/destino
+document.addEventListener('DOMContentLoaded', () => {
+  ['origemCidade','origemEstado','destino','estado'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', tentarCalcularDistancia);
+  });
+});
+
 function doPost_proxy(payload) { /* server-side only */ }
 </script>
 </body>

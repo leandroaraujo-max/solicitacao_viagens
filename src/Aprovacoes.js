@@ -52,44 +52,67 @@ function processarTokenAprovacao(token) {
 
 /**
  * Executa a decisão de aprovação e avança o fluxo.
- * Fluxo:
- *   AprovaViagem  (liderança) → dispara e-mails às agências, status = 'Aguardando Cotação'
- *   ReprovaViagem (liderança) → status = 'Reprovada', notifica viajante
- *   AprovaTastur / AprovaKontrip (setor) → conclui, notifica agência vencedora
- *   Reprova       (setor) → status = 'Reprovada', notifica viajante
+ * Fluxo v2:
+ *   AprovaViagem     (liderança)  → pré-aprovação setor, status = 'Pendente Pré-Aprovação Setor'
+ *   ReprovaViagem    (liderança)  → status = 'Reprovada', notifica viajante
+ *   PreAprovaViagem  (setor)      → dispara e-mails às agências, status = 'Aguardando Cotação'
+ *   PreReprovaViagem (setor)      → status = 'Reprovada', notifica viajante (reprovado pelo setor)
+ *   AprovaTastur / AprovaKontrip → conclui, notifica agência vencedora
+ *   Reprova          (setor)      → status = 'Reprovada', notifica viajante
  */
 function executarDecisaoAprovacao(reqID, emailAprovador, decisao, token) {
   const req = getRequisicao(reqID);
   if (!req) throw new Error(`Solicitação ${reqID} não encontrada.`);
 
+  const etapaNome = {
+    AprovaViagem: 'Liderança', ReprovaViagem: 'Liderança',
+    PreAprovaViagem: 'Setor', PreReprovaViagem: 'Setor',
+    AprovaTastur: 'Setor', AprovaKontrip: 'Setor', Reprova: 'Setor',
+  };
+
   registrarLogAprovacao({
     reqID,
     matriculaViajante:  req.matricula_viajante,
     matriculaOperador:  req.matricula_operador,
-    etapa:              (decisao === 'AprovaViagem' || decisao === 'ReprovaViagem') ? 'Liderança' : 'Setor',
+    etapa:              etapaNome[decisao] || decisao,
     aprovadorEmail:     emailAprovador,
-    acao:               decisao.startsWith('Aprova') ? 'Aprovado' : 'Reprovado',
+    acao:               decisao.startsWith('Aprova') || decisao === 'PreAprovaViagem' ? 'Aprovado' : 'Reprovado',
     agenciaEscolhida:   decisao === 'AprovaTastur' ? 'Tastur' : decisao === 'AprovaKontrip' ? 'Kontrip' : '',
     tokenUtilizado:     token
   });
 
   if (decisao === 'AprovaViagem') {
-    // Liderança aprovou a necessidade da viagem → dispara cotação às agências
-    atualizarStatusSolicitacao(reqID, 'Aguardando Cotação');
-    const vi = { nome: req.nome_viajante, categoria_hospedagem: req.quarto_tipo_solicitado, motivo_categoria_hosp: '' };
-    dispararEmailAgencias(reqID, vi, req, req.classificacao_aereo);
-    Logger.log(`[LIDERANÇA APROVOU] ${reqID} — agências notificadas`);
+    // E1: Liderança aprovou → vai para pré-aprovação do setor
+    atualizarStatusSolicitacao(reqID, 'Pendente Pré-Aprovação Setor');
+    registrarPreAprovacao(reqID, emailAprovador);
+    enviarEmailPreAprovacaoSetor(reqID, req);
+    Logger.log(`[LIDERANÇA APROVOU] ${reqID} → aguardando pré-aprovação setor`);
     return;
   }
 
   if (decisao === 'ReprovaViagem') {
     atualizarStatusSolicitacao(reqID, 'Reprovada');
-    notificarReprovacao(req, emailAprovador, 'Liderança');
+    // E2: passa nome do gestor N1
+    notificarReprovacao(req, emailAprovador, 'Liderança', req.aprovador_n1_nome || emailAprovador);
+    return;
+  }
+
+  if (decisao === 'PreAprovaViagem') {
+    // E1: Setor pré-aprovou → dispara às agências
+    atualizarStatusSolicitacao(reqID, 'Aguardando Cotação');
+    const vi = { nome: req.nome_viajante, categoria_hospedagem: req.quarto_tipo_solicitado, motivo_categoria_hosp: '' };
+    dispararEmailAgencias(reqID, vi, req, req.classificacao_aereo);
+    Logger.log(`[SETOR PRÉ-APROVOU] ${reqID} — agências notificadas`);
+    return;
+  }
+
+  if (decisao === 'PreReprovaViagem') {
+    atualizarStatusSolicitacao(reqID, 'Reprovada');
+    notificarReprovacao(req, emailAprovador, 'Setor', emailAprovador);
     return;
   }
 
   if (decisao === 'AprovaTastur' || decisao === 'AprovaKontrip') {
-    // Setor de viagens aprovou a cotação e escolheu a agência
     const agencia = decisao === 'AprovaTastur' ? 'Tastur' : 'Kontrip';
     concluirAprovacao(reqID, req, agencia);
     return;
@@ -97,7 +120,7 @@ function executarDecisaoAprovacao(reqID, emailAprovador, decisao, token) {
 
   if (decisao === 'Reprova') {
     atualizarStatusSolicitacao(reqID, 'Reprovada');
-    notificarReprovacao(req, emailAprovador, 'Setor');
+    notificarReprovacao(req, emailAprovador, 'Setor', emailAprovador);
     return;
   }
 
@@ -157,6 +180,49 @@ function gerarTokensSetor(reqID, emailSetor) {
     linkKontrip: `${cfg.WEBAPP_URL}?token=${tokens.kontrip}`,
     linkReprova: `${cfg.WEBAPP_URL}?token=${tokens.reprova}`,
   };
+}
+
+/**
+ * Gera tokens de pré-aprovação para o SETOR DE VIAGENS (E1).
+ * Decisões: PreAprovaViagem ou PreReprovaViagem.
+ * Validade: 48h
+ */
+function gerarTokensPreAprovacao(reqID, emailSetor) {
+  const cfg    = getConfig();
+  const sheet  = SpreadsheetApp.openById(cfg.SHEET_ID).getSheetByName('Tokens');
+  const expira = new Date();
+  expira.setHours(expira.getHours() + 48);
+
+  const tokens = {
+    aprova:  Utilities.getUuid(),
+    reprova: Utilities.getUuid(),
+  };
+
+  const agora = new Date();
+  sheet.appendRow([tokens.aprova,  reqID, emailSetor, 'PreAprovaViagem',  expira, 'Pendente', '', agora]);
+  sheet.appendRow([tokens.reprova, reqID, emailSetor, 'PreReprovaViagem', expira, 'Pendente', '', agora]);
+
+  return {
+    linkAprova:  `${cfg.WEBAPP_URL}?token=${tokens.aprova}`,
+    linkReprova: `${cfg.WEBAPP_URL}?token=${tokens.reprova}`,
+  };
+}
+
+function registrarPreAprovacao(reqID, emailAprovador) {
+  const cfg   = getConfig();
+  const sheet = SpreadsheetApp.openById(cfg.SHEET_ID).getSheetByName('Solicitacoes');
+  const dados = sheet.getDataRange().getValues();
+  const h     = dados[0];
+  const idxReq = h.indexOf('req_id');
+  const idxEmail = h.indexOf('pre_aprovacao_email');
+  const idxEm    = h.indexOf('pre_aprovacao_em');
+
+  for (let i = 1; i < dados.length; i++) {
+    if (String(dados[i][idxReq]) !== String(reqID)) continue;
+    if (idxEmail >= 0) sheet.getRange(i + 1, idxEmail + 1).setValue(emailAprovador);
+    if (idxEm    >= 0) sheet.getRange(i + 1, idxEm    + 1).setValue(new Date());
+    break;
+  }
 }
 
 // ── Helpers internos ─────────────────────────────────────────
@@ -250,6 +316,16 @@ function verificarSLAs() {
 
     if (status === 'Aguardando Cotação' || status === 'Cotação Parcial') {
       verificarSLACotacao(row, agora, cfg);
+    }
+
+    if (status === 'Pendente Pré-Aprovação Setor') {
+      // Lembrete ao setor se ainda não pré-aprovou após 24h
+      const criadoEm = new Date(row.criado_em);
+      const horas    = (agora - criadoEm) / (1000 * 60 * 60);
+      if (horas >= 24) {
+        notificarSetorAprovacaoManual(row);
+        Logger.log(`[SLA] Pré-aprovação setor pendente há ${Math.floor(horas)}h — ${row.req_id}`);
+      }
     }
 
     if (status === 'Pendente Aprovação N1') {

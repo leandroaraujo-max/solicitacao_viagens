@@ -4,20 +4,22 @@
 
 /**
  * Busca dados do colaborador.
+ * C1: aceita CPF (11 dígitos sem formatação) ou matrícula (legado).
  * Padrão cache-aside: Sheet → BQ → grava no cache → retorna.
- * @param {string} matricula
+ * @param {string} cpfOuMatricula
  * @returns {Object} Dados do viajante + categoria calculada
  */
-function buscarViajante(matricula) {
-  if (!matricula) throw new Error('Matrícula não informada.');
+function buscarViajante(cpfOuMatricula) {
+  if (!cpfOuMatricula) throw new Error('CPF/Matrícula não informado.');
+  const chave = String(cpfOuMatricula).replace(/\D/g,'');  // remove formatação
 
-  // 1. Tenta cache (aba Viajantes)
-  const cache = buscarViajanteCache(matricula);
+  // 1. Tenta cache (aba Viajantes) por cpf ou matrícula
+  const cache = buscarViajanteCache(chave);
   if (cache) return cache;
 
   // 2. Cache miss → consulta BQ
-  const dadosBQ = consultarColaboradorBQ(matricula);
-  if (!dadosBQ) throw new Error(`Matrícula ${matricula} não encontrada ou colaborador inativo.`);
+  const dadosBQ = consultarColaboradorBQ(chave);
+  if (!dadosBQ) throw new Error(`CPF/Matrícula ${chave} não encontrado ou colaborador inativo.`);
 
   // 3. Grava no cache (aba Viajantes) com categorização inicial
   const viajante = criarOuAtualizarViajante(dadosBQ);
@@ -26,20 +28,22 @@ function buscarViajante(matricula) {
 }
 
 /**
- * Busca na aba Viajantes da Sheet (cache).
+ * Busca na aba Viajantes da Sheet (cache) por CPF ou matrícula.
  */
-function buscarViajanteCache(matricula) {
+function buscarViajanteCache(chave) {
   const cfg   = getConfig();
   const sheet = SpreadsheetApp.openById(cfg.SHEET_ID).getSheetByName('Viajantes');
-  if (!sheet) return null;  // aba ainda não criada
+  if (!sheet) return null;
   const dados = sheet.getDataRange().getValues();
-  if (dados.length <= 1) return null;  // apenas header ou vazia
+  if (dados.length <= 1) return null;
   const header = dados[0];
   const idxMat = header.indexOf('matricula');
-  if (idxMat < 0) return null;  // header incorreto
+  const idxCPF = header.indexOf('cpf');
 
   for (let i = 1; i < dados.length; i++) {
-    if (String(dados[i][idxMat]) === String(matricula)) {
+    const matV = String(dados[i][idxMat] || '').replace(/\D/g,'');
+    const cpfV = String(idxCPF >= 0 ? dados[i][idxCPF] || '' : '').replace(/\D/g,'');
+    if (matV === chave || cpfV === chave) {
       return linhaParaObjeto(header, dados[i]);
     }
   }
@@ -48,23 +52,24 @@ function buscarViajanteCache(matricula) {
 
 /**
  * Consulta o BigQuery com as tabelas reais de produção.
- *
- * Tabelas:
- *   maga-bigdata.kirk.assignee               — identidade, e-mail, hierarquia
- *   maga-bigdata.mlpap.mag_v_funcionarios_ativos — dados de RH (cargo, filial, CC…)
- *
- * JOIN: assignee.CUSTOM1 = CAST(mag_v_funcionarios_ativos.ID AS STRING)
- * Hierarquia: assignee.superior (INTEGER) → outro assignee.id (gestor N1)
- *             gestor_N1.superior → gestor N2
+ * C1: busca por custom2 (CPF) em vez de CUSTOM1 (matrícula).
+ * C2: retorna situação do aprovador N1 (para detectar férias).
  */
-function consultarColaboradorBQ(matricula) {
+function consultarColaboradorBQ(cpfOuMatricula) {
   const cfg = getConfig();
-  const tA  = cfg.BQ_TABLE_ASSIGNEE;      // 'maga-bigdata.kirk.assignee'
-  const tF  = cfg.BQ_TABLE_FUNCIONARIOS;  // 'maga-bigdata.mlpap.mag_v_funcionarios_ativos'
+  const tA  = cfg.BQ_TABLE_ASSIGNEE;
+  const tF  = cfg.BQ_TABLE_FUNCIONARIOS;
+
+  // C1: detecta se é CPF (11 dígitos) ou matrícula (outros comprimentos)
+  const eCPF   = /^\d{11}$/.test(cpfOuMatricula);
+  const filtro = eCPF
+    ? `t1.custom2 = '${cpfOuMatricula}'`
+    : `t1.CUSTOM1 = '${cpfOuMatricula}'`;
 
   const query = `
     SELECT DISTINCT
       CAST(t2.ID AS STRING)                          AS matricula,
+      t1.custom2                                     AS cpf,
       t2.NOME                                        AS nome,
       t2.CARGO                                       AS cargo,
       t2.FILIAL                                      AS filial,
@@ -77,11 +82,12 @@ function consultarColaboradorBQ(matricula) {
       t2.DATA_ADMISSAO                               AS data_admissao,
       t1.email                                       AS email,
       t1.user_name                                   AS user_name,
-      t1.custom2                                     AS custom2,
       t1.superior                                    AS superior_id,
       CONCAT(g1.first_name, ' ', g1.last_name)       AS aprovador_n1_nome,
       g1.email                                       AS aprovador_n1_email,
       g1.id                                          AS aprovador_n1_id,
+      -- C2: situação do N1 para detectar férias
+      fg1.SITUACAO                                   AS aprovador_n1_situacao,
       CONCAT(g2.first_name, ' ', g2.last_name)       AS aprovador_n2_nome,
       g2.email                                       AS aprovador_n2_email
     FROM \`${tA}\` AS t1
@@ -89,10 +95,12 @@ function consultarColaboradorBQ(matricula) {
       ON t1.CUSTOM1 = CAST(t2.ID AS STRING)
     LEFT JOIN \`${tA}\` AS g1
       ON t1.superior = g1.id AND g1.active = TRUE
+    LEFT JOIN \`${tF}\` AS fg1
+      ON g1.CUSTOM1 = CAST(fg1.ID AS STRING)
     LEFT JOIN \`${tA}\` AS g2
       ON g1.superior = g2.id AND g2.active = TRUE
-    WHERE t1.CUSTOM1 = '${matricula}'
-      AND t2.SITUACAO NOT IN ('Desligado', 'Demitido', 'Afastado', 'Aposentado', 'Férias', 'Inativo')
+    WHERE ${filtro}
+      AND t2.SITUACAO NOT IN ('Desligado', 'Demitido', 'Afastado', 'Aposentado', 'Inativo')
       AND t1.active = TRUE
     LIMIT 1
   `;
@@ -114,15 +122,16 @@ function consultarColaboradorBQ(matricula) {
 
 /**
  * Extrai cadeia completa de aprovação para um viajante.
- * Utilizada no momento da submissão da solicitação.
+ * C2: inclui n1_situacao para detectar férias.
  */
-function extrairCadeiaAprovacao(matricula) {
-  const viajante = buscarViajante(matricula);
+function extrairCadeiaAprovacao(cpfOuMatricula) {
+  const viajante = buscarViajante(cpfOuMatricula);
   return {
-    n1_email: viajante.aprovador_n1_email || null,
-    n1_nome:  viajante.aprovador_n1_nome  || null,
-    n2_email: viajante.aprovador_n2_email || null,
-    n2_nome:  viajante.aprovador_n2_nome  || null,
+    n1_email:    viajante.aprovador_n1_email    || null,
+    n1_nome:     viajante.aprovador_n1_nome     || null,
+    n1_situacao: viajante.aprovador_n1_situacao || null,   // C2
+    n2_email:    viajante.aprovador_n2_email    || null,
+    n2_nome:     viajante.aprovador_n2_nome     || null,
   };
 }
 
@@ -170,6 +179,7 @@ function criarOuAtualizarViajante(dadosBQ) {
 
   const nova = [
     dadosBQ.matricula,
+    dadosBQ.cpf || dadosBQ.custom2 || '',   // C1: salva cpf no cache
     dadosBQ.nome,
     dadosBQ.cargo,
     dadosBQ.cod_categoria  || '',

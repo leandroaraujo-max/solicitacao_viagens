@@ -237,6 +237,48 @@
       </div>
     </div>
 
+    <!-- Rodoviário (A5) -->
+    <div id="secaoRodov" class="card card-inner hidden">
+      <h3>🚌 Cotação Rodoviária</h3>
+      <div class="grid-2">
+        <div class="field-group">
+          <label>Origem</label>
+          <div class="info-box" id="rodovOrigemInfo">—</div>
+        </div>
+        <div class="field-group">
+          <label>Destino</label>
+          <div class="info-box" id="rodovDestinoInfo">—</div>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="field-group">
+          <label>Empresa de Ônibus <span class="req">*</span></label>
+          <input type="text" id="rodovEmpresa" placeholder="Ex: Cometa, Catarinense, JBL..." />
+        </div>
+        <div class="field-group">
+          <label>Tipo de Ônibus</label>
+          <select id="rodovTipoOnibus">
+            <option value="Convencional">Convencional</option>
+            <option value="Leito">Leito (semi/leito)</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="field-group">
+          <label>Partida <span class="req">*</span></label>
+          <input type="datetime-local" id="rodovPartida" />
+        </div>
+        <div class="field-group">
+          <label>Chegada estimada <span class="req">*</span></label>
+          <input type="datetime-local" id="rodovChegada" />
+        </div>
+      </div>
+      <div class="field-group">
+        <label>Valor Total (R$) <span class="req">*</span></label>
+        <input type="number" id="rodovValor" step="0.01" min="0" placeholder="0,00" />
+      </div>
+    </div>
+
     <!-- PDF da Cotação -->
     <div class="field-group">
       <label>PDF da Cotação (opcional — máx 5MB)</label>
@@ -312,12 +354,17 @@ function renderizarSolicitacao(req) {
   const el    = document.getElementById('dadosSolicitacao');
   el.innerHTML = `
     <span><label>Viajante</label><strong>${req.nome_viajante}</strong></span>
+    <span><label>Centro de Custo</label>${req.centro_custo || '—'}</span>
+    <span><label>Origem</label>${req.origem_cidade ? req.origem_cidade + (req.origem_estado ? ' / ' + req.origem_estado : '') : '—'}</span>
     <span><label>Destino</label>${req.destino_cidade} / ${req.destino_estado}</span>
     <span><label>Ida</label>${formatData(req.data_ida)}</span>
     <span><label>Volta</label>${formatData(req.data_volta)}</span>
     <span><label>Serviços</label>${req.tipo_servico.join(', ')}</span>
     <span><label>Quarto</label><strong>${req.quarto_tipo_solicitado}</strong></span>
-    <span><label>Veículo</label><strong>${req.veiculo_tipo_solicitado}</strong></span>`;
+    <span><label>Veículo</label><strong>${req.veiculo_tipo_solicitado}</strong></span>
+    ${req.motivo_viagem ? `<span style="grid-column:1/-1"><label>Motivo</label>${req.motivo_viagem}</span>` : ''}
+    ${req.observacoes_viajante ? `<span style="grid-column:1/-1"><label>Observações do viajante</label><em>${req.observacoes_viajante}</em></span>` : ''}
+    ${req.bagagem_extra ? `<span style="grid-column:1/-1"><label>Bagagem extra</label>🧳 Sim — despachar bagagem</span>` : ''}`;
 
   if (req.status === 'Aprovada / Aguardando Voucher') {
     document.getElementById('secaoVoucher').classList.remove('hidden');
@@ -369,9 +416,20 @@ function formatDT(dt) {
 
 function exibirSecoesServico(req) {
   const tipos = Array.isArray(req.tipo_servico) ? req.tipo_servico : [req.tipo_servico];
-  if (tipos.includes('Aereo'))      document.getElementById('secaoAereo').classList.remove('hidden');
-  if (tipos.includes('Hospedagem')) document.getElementById('secaoHospedagem').classList.remove('hidden');
-  if (tipos.includes('Carro'))      document.getElementById('secaoCarro').classList.remove('hidden');
+  if (tipos.includes('Aereo'))       document.getElementById('secaoAereo').classList.remove('hidden');
+  if (tipos.includes('Hospedagem'))  document.getElementById('secaoHospedagem').classList.remove('hidden');
+  if (tipos.includes('Carro'))       document.getElementById('secaoCarro').classList.remove('hidden');
+  if (tipos.includes('Rodoviario')) {
+    const secaoRodov = document.getElementById('secaoRodov');
+    if (secaoRodov) {
+      secaoRodov.classList.remove('hidden');
+      // Preenche campos read-only com dados do pedido
+      const rdOrig  = document.getElementById('rodovOrigemInfo');
+      const rdDest  = document.getElementById('rodovDestinoInfo');
+      if (rdOrig) rdOrig.textContent = req.origem_cidade || '—';
+      if (rdDest) rdDest.textContent = req.destino_cidade || '—';
+    }
+  }
 }
 
 // ── Cálculos ──────────────────────────────────────────────────
@@ -451,24 +509,32 @@ function enviarCotacao() {
       seguro:     document.querySelector('[name="carroSeguro"]:checked')?.value === 'true',
       valor:      parseFloat(document.getElementById('carroValor')?.value),
     },
+    rodoviario: {
+      empresa:     document.getElementById('rodovEmpresa')?.value    || '',
+      origem:      document.getElementById('rodovOrigemInfo')?.textContent || '',
+      destino:     document.getElementById('rodovDestinoInfo')?.textContent || '',
+      partida:     document.getElementById('rodovPartida')?.value    || '',
+      chegada:     document.getElementById('rodovChegada')?.value    || '',
+      tipo_onibus: document.getElementById('rodovTipoOnibus')?.value || '',
+      valor:       parseFloat(document.getElementById('rodovValor')?.value) || 0,
+    },
     obs:     document.getElementById('cotacaoObs')?.value,
     cotacaoPdfBase64: cotacaoPdfBase64 || null,
   };
 
-  // Envia apenas seções cujos campos estão visíveis (serviço solicitado)
-  if (document.getElementById('secaoAereo').classList.contains('hidden'))      delete payload.aereo;
-  if (document.getElementById('secaoHospedagem').classList.contains('hidden')) delete payload.hospedagem;
-  if (document.getElementById('secaoCarro').classList.contains('hidden'))      delete payload.carro;
+  if (document.getElementById('secaoAereo').classList.contains('hidden'))       delete payload.aereo;
+  if (document.getElementById('secaoHospedagem').classList.contains('hidden'))  delete payload.hospedagem;
+  if (document.getElementById('secaoCarro').classList.contains('hidden'))       delete payload.carro;
+  const secaoRodov = document.getElementById('secaoRodov');
+  if (!secaoRodov || secaoRodov.classList.contains('hidden'))                   delete payload.rodoviario;
 
-  document.getElementById('btnEnviarCotacao').disabled = true;
-  document.getElementById('btnEnviarCotacao').textContent = 'Enviando...';
+  setBtn('btnEnviarCotacao', true, '📤 Enviar Cotação');
 
   google.script.run
     .withSuccessHandler(r => {
       if (!r.sucesso) {
         mostrarAlerta(r.erro || 'Erro ao enviar cotação.', 'erro');
-        document.getElementById('btnEnviarCotacao').disabled = false;
-        document.getElementById('btnEnviarCotacao').textContent = '📤 Enviar Cotação';
+        setBtn('btnEnviarCotacao', false, '📤 Enviar Cotação');
         return;
       }
       document.getElementById('formCotacao').classList.add('hidden');
@@ -477,8 +543,7 @@ function enviarCotacao() {
     })
     .withFailureHandler(e => {
       mostrarAlerta(e.message, 'erro');
-      document.getElementById('btnEnviarCotacao').disabled = false;
-      document.getElementById('btnEnviarCotacao').textContent = '📤 Enviar Cotação';
+      setBtn('btnEnviarCotacao', false, '📤 Enviar Cotação');
     })
     .doPost_proxy(payload);
 }
@@ -488,7 +553,7 @@ const vouchersBase64 = {};
 
 function montarCamposVoucher(req) {
   const tipos  = Array.isArray(req.tipo_servico) ? req.tipo_servico : [req.tipo_servico];
-  const icones = { Aereo: '✈', Hospedagem: '🏨', Carro: '🚗' };
+  const icones = { Aereo: '✈', Hospedagem: '🏨', Carro: '🚗', Rodoviario: '🚌' };
   const el     = document.getElementById('camposVoucher');
   el.innerHTML = tipos.map(t => `
     <div class="field-group">
@@ -531,6 +596,13 @@ function enviarVouchers() {
 }
 
 // ── Utilitários UI ────────────────────────────────────────────
+function setBtn(id, loading, texto) {
+  const b = document.getElementById(id);
+  if (!b) return;
+  b.disabled = loading;
+  b.innerHTML = loading ? '<span class="btn-spin">⏳</span> Aguarde...' : texto;
+}
+
 function mostrarAlerta(msg, tipo) {
   const el = document.getElementById('alertaStatus');
   el.textContent = msg;

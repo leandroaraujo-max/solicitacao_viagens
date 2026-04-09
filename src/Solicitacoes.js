@@ -19,68 +19,109 @@ function submeterSolicitacao(payload) {
   const dataIda          = new Date(payload.data_ida);
   const agora            = new Date();
   const antecedenciaDias = Math.floor((dataIda - agora) / (1000 * 60 * 60 * 24));
-  const classificacao    = payload.tipo_servico.includes('Aereo')
+  const servicos = Array.isArray(payload.tipo_servico) ? payload.tipo_servico : [payload.tipo_servico];
+  const classificacao    = servicos.includes('Aereo')
     ? (antecedenciaDias < 15 ? 'Emergencial' : 'Comum')
     : 'N/A';
 
-  // 4. Carrega perfil do viajante (já com categorização)
-  const viajante = buscarViajante(payload.matricula_viajante);
+  // 4. Carrega perfil do viajante (já com categorização) — C1: usa cpf
+  const viajante = buscarViajante(payload.cpf_viajante || payload.matricula_viajante);
 
   // 5. Extrai cadeia de aprovação do BQ
-  const cadeia = extrairCadeiaAprovacao(payload.matricula_viajante);
-  validarCadeiaAprovacao(cadeia, payload.matricula_viajante);
+  const cadeia = extrairCadeiaAprovacao(payload.cpf_viajante || payload.matricula_viajante);
+  validarCadeiaAprovacao(cadeia, payload.cpf_viajante || payload.matricula_viajante);
 
-  // 6. Monta linha para a Sheet
+  // 6. E3: condicao especial pré-aprovada pelo perfil
+  let excecaoStatusRH = '';
+  if (payload.excecao_pre_aprovada) {
+    excecaoStatusRH = 'Pre-aprovado';
+  }
+
+  // 7. Monta linha para a Sheet (v2 — com todos os novos campos)
   const agora2 = new Date();
   const linha = [
     reqID,
-    payload.matricula_viajante,
+    // C1
+    payload.cpf_viajante          || viajante.cpf || '',
+    payload.matricula_viajante    || viajante.matricula || '',
     viajante.nome,
-    payload.matricula_operador || payload.matricula_viajante,
-    payload.nome_operador      || viajante.nome,
-    payload.via_delegacao      || false,
-    'Pendente Aprovação Liderança', // status inicial — aguarda aprovação hierarquica
-    agora2,                       // criado_em
-    agora2,                       // atualizado_em
-    Array.isArray(payload.tipo_servico) ? payload.tipo_servico.join(',') : payload.tipo_servico,
+    payload.matricula_operador    || payload.matricula_viajante || '',
+    payload.nome_operador         || viajante.nome,
+    payload.via_delegacao         || false,
+    'Pendente Aprovação Liderança',
+    agora2,
+    agora2,
+    servicos.join(','),
+    // A1 — origem
+    payload.origem_cidade         || '',
+    payload.origem_estado         || '',
+    // destino
     payload.destino_cidade,
-    payload.destino_estado || '',
+    payload.destino_estado        || '',
     payload.data_ida,
-    payload.data_volta,
+    payload.data_volta            || '',
     antecedenciaDias,
     classificacao,
-    payload.motivo_viagem || '',
-    viajante.categoria_hospedagem,   // quarto_tipo_solicitado
-    viajante.categoria_veiculo,      // veiculo_tipo_solicitado
-    viajante.email || '',            // email do viajante (usado em notificações)
-    // Preferência do viajante via Amadeus (opcional)
-    payload.preferencia_voo_cia      || '',
-    payload.preferencia_voo_numero   || '',
-    payload.preferencia_voo_saida    || '',
-    payload.preferencia_voo_chegada  || '',
-    payload.preferencia_voo_paradas  !== undefined ? payload.preferencia_voo_paradas : '',
-    payload.preferencia_voo_bagagem  !== undefined ? payload.preferencia_voo_bagagem : '',
-    payload.preferencia_voo_valor    || '',
-    payload.preferencia_hotel_nome   || '',
+    payload.motivo_viagem         || '',
+    viajante.categoria_hospedagem,
+    viajante.categoria_veiculo,
+    viajante.email                || '',
+    // A2
+    payload.observacoes_viajante  || '',
+    // A3
+    payload.bagagem_extra         || false,
+    // A4
+    payload.aereo_periodo_preferido || '',
+    payload.aereo_tipo_trecho       || '',
+    // A5 — rodoviário
+    payload.rodov_data_ida          || '',
+    payload.rodov_data_volta        || '',
+    payload.rodov_periodo_preferido || '',
+    payload.rodov_tipo_trecho       || '',
+    payload.rodov_tipo_onibus       || '',
+    // A6 — carro completo
+    payload.carro_cidade_retirada   || '',
+    payload.carro_hora_retirada     || '',
+    payload.carro_cidade_devolucao  || '',
+    payload.carro_hora_devolucao    || '',
+    // D1
+    payload.distancia_km            || '',
+    payload.aereo_elegivel          || '',
+    // Preferência Duffel
+    payload.preferencia_voo_cia     || '',
+    payload.preferencia_voo_numero  || '',
+    payload.preferencia_voo_saida   || '',
+    payload.preferencia_voo_chegada || '',
+    payload.preferencia_voo_paradas !== undefined ? payload.preferencia_voo_paradas : '',
+    payload.preferencia_voo_bagagem !== undefined ? payload.preferencia_voo_bagagem : '',
+    payload.preferencia_voo_valor   || '',
+    payload.preferencia_hotel_nome  || '',
     payload.preferencia_hotel_estrelas || '',
     payload.preferencia_hotel_diaria || '',
     payload.preferencia_hotel_total  || '',
-    // Exceção de saúde (preenchida depois via salvarExcecaoQuartoIndividual)
-    payload.quarto_excecao_saude || false, '', '', '', '', '', '', '', '',
-    // Casamento (preenchido pelo motor)
+    // Exceção saúde — E3: pre_aprovada
+    payload.quarto_excecao_saude || false,
+    payload.excecao_pre_aprovada || false,
+    payload.excecao_motivo || '', payload.excecao_cid || '',
+    '', '',  // laudo_link, laudo_nome (gravados pelo upload de laudo)
+    payload.excecao_validade || '', payload.excecao_obs || '',
+    excecaoStatusRH, '',     // excecao_status_rh, excecao_rh_em
+    // Casamento (5)
     '', '', '', '', '',
-    // Aprovação N1 (6) + email_enviado_em (1)
+    // Aprovação N1
     cadeia.n1_email || '', cadeia.n1_nome || '', cadeia.n1_nivel || '',
     '', '', '', '',
-    // Aprovação N2 (4) + email_enviado_em (1)
+    // Aprovação N2
     cadeia.n2_email || '', cadeia.n2_nome || '',
     '', '', '',
-    // RH (4)
+    // E1 — pré-aprovação setor
+    '', '',
+    // RH
     payload.quarto_excecao_saude || false, '', '', '',
     // Status geral + agência
     'Pendente Aprovação Liderança', '',
-    // Cotações Tastur + Kontrip — 31 colunas cada = 62 vazias
-    ...Array(62).fill(''),
+    // Cotações Tastur + Kontrip — 39 colunas cada = 78 vazias
+    ...Array(78).fill(''),
     // Voucher (5)
     '', '', '', '', ''
   ];
@@ -88,7 +129,18 @@ function submeterSolicitacao(payload) {
   const sheet = SpreadsheetApp.openById(cfg.SHEET_ID).getSheetByName('Solicitacoes');
   sheet.appendRow(linha);
 
-  // 7. Dispara e-mail de aprovação para a liderança direta (govern ança)
+  // 8. Tratamento de laudo (se fornecido e não pré-aprovado)
+  if (payload.laudoBase64 && payload.laudoNome && !payload.excecao_pre_aprovada) {
+    salvarExcecaoQuartoIndividual({
+      reqID,
+      laudoBase64: payload.laudoBase64,
+      laudoNome:   payload.laudoNome,
+      excecao_cid: payload.excecao_cid,
+      excecao_validade: payload.excecao_validade,
+    });
+  }
+
+  // 9. Dispara e-mail de aprovação para a liderança direta
   enviarEmailAprovacaoLideranca(reqID, viajante, payload, classificacao, cadeia);
 
   return { reqID, status: 'Pendente Aprovação Liderança', classificacao, antecedenciaDias };
@@ -96,25 +148,18 @@ function submeterSolicitacao(payload) {
 
 // ── Validações ───────────────────────────────────────────────
 function validarPayloadSolicitacao(p) {
-  if (!p.matricula_viajante) throw new Error('Matrícula do viajante é obrigatória.');
-  if (!p.data_ida)           throw new Error('Data de ida é obrigatória.');
-  if (!p.data_volta)         throw new Error('Data de volta é obrigatória.');
-  if (!p.destino_cidade)     throw new Error('Destino é obrigatório.');
-  if (!p.tipo_servico)       throw new Error('Tipo de serviço é obrigatório.');
+  if (!p.cpf_viajante && !p.matricula_viajante) throw new Error('CPF/Matrícula do viajante é obrigatório.');
+  if (!p.data_ida)       throw new Error('Data de ida é obrigatória.');
+  if (!p.destino_cidade) throw new Error('Destino é obrigatório.');
+  if (!p.tipo_servico)   throw new Error('Tipo de serviço é obrigatório.');
 
-  const dataIda  = new Date(p.data_ida);
-  const dataVolta = new Date(p.data_volta);
-  const agora    = new Date();
-
+  const dataIda = new Date(p.data_ida);
+  const agora   = new Date();
   if (dataIda <= agora) throw new Error('A data de ida deve ser futura.');
-  if (dataVolta < dataIda) throw new Error('A data de volta deve ser após a data de ida.');
 
-  // Valida antecedência mínima para hospedagem/carro
-  const tipos = Array.isArray(p.tipo_servico) ? p.tipo_servico : [p.tipo_servico];
-  const apenasHospCarro = tipos.every(t => ['Hospedagem', 'Carro'].includes(t));
-  if (apenasHospCarro) {
-    const antecedencia = Math.floor((dataIda - agora) / (1000 * 60 * 60 * 24));
-    if (antecedencia < 2) throw new Error('Hospedagem e carro requerem mínimo de 2 dias de antecedência.');
+  if (p.data_volta) {
+    const dataVolta = new Date(p.data_volta);
+    if (dataVolta < dataIda) throw new Error('A data de volta deve ser após a data de ida.');
   }
 }
 
@@ -194,6 +239,16 @@ function submeterCotacaoAgencia(payload) {
     campos[`${prefixo}_carro_local`]     = payload.carro.local          || '';
     campos[`${prefixo}_carro_seguro`]    = payload.carro.seguro         || false;
     campos[`${prefixo}_carro_valor`]     = payload.carro.valor          || 0;
+  }
+  // A5 — Rodoviário
+  if (payload.rodoviario) {
+    campos[`${prefixo}_rodov_empresa`]   = payload.rodoviario.empresa   || '';
+    campos[`${prefixo}_rodov_origem`]    = payload.rodoviario.origem    || '';
+    campos[`${prefixo}_rodov_destino`]   = payload.rodoviario.destino   || '';
+    campos[`${prefixo}_rodov_partida`]   = payload.rodoviario.partida   || '';
+    campos[`${prefixo}_rodov_chegada`]   = payload.rodoviario.chegada   || '';
+    campos[`${prefixo}_rodov_tipo_onibus`] = payload.rodoviario.tipo_onibus || '';
+    campos[`${prefixo}_rodov_valor`]     = payload.rodoviario.valor     || 0;
   }
   campos[`${prefixo}_obs`]               = payload.obs                  || '';
   campos[`${prefixo}_enviado_em`]        = new Date();

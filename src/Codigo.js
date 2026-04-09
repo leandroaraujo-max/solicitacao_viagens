@@ -72,9 +72,9 @@ function doPost(e) {
   const acao    = payload.acao;
 
   const rotas = {
-    buscarViajante:           () => buscarViajante(payload.matricula),
-    validarDelegacao:         () => validarDelegacao(payload.matriculaOperador, payload.matriculaViajante),
-    buscarCompatibildade:     () => buscarCompatibilidadeColega(payload.matriculaColega, payload.matriculaViajante),
+    buscarViajante:           () => buscarViajante(payload.cpf || payload.matricula),
+    validarDelegacao:         () => validarDelegacao(payload.matriculaOperador || payload.cpfOperador, payload.matriculaViajante || payload.cpfViajante),
+    buscarCompatibildade:     () => buscarCompatibilidadeColega(payload.matriculaColega || payload.cpfColega, payload.matriculaViajante || payload.cpfViajante),
     submeterSolicitacao:      () => submeterSolicitacao(payload),
     salvarExcecaoLaudo:       () => salvarExcecaoQuartoIndividual(payload),
     submeterCotacaoAgencia:   () => submeterCotacaoAgencia(payload),
@@ -97,20 +97,23 @@ function doPost_proxy(payload) {
   const acao = payload.acao;
 
   const rotas = {
-    buscarViajante:              () => buscarViajante(payload.matricula),
+    buscarViajante:              () => buscarViajante(payload.cpf || payload.matricula),
     validarDelegacao:            () => {
-      const delegacao = validarDelegacao(payload.matriculaOperador, payload.matriculaViajante);
-      const viajante  = buscarViajante(payload.matriculaViajante);
+      const cpfOp  = payload.cpfOperador  || payload.matriculaOperador;
+      const cpfVia = payload.cpfViajante  || payload.matriculaViajante;
+      const delegacao = validarDelegacao(cpfOp, cpfVia);
+      const viajante  = buscarViajante(cpfVia);
       return { viajante, delegacao };
     },
-    buscarCompatibildade:        () => buscarCompatibilidadeColega(payload.matriculaColega, payload.matriculaViajante),
+    buscarCompatibildade:        () => buscarCompatibilidadeColega(payload.cpfColega || payload.matriculaColega, payload.cpfViajante || payload.matriculaViajante),
     submeterSolicitacao:         () => submeterSolicitacao(payload),
     salvarExcecaoLaudo:          () => salvarExcecaoQuartoIndividual(payload),
     submeterCotacaoAgencia:      () => submeterCotacaoAgencia(payload),
     uploadVoucher:               () => uploadVoucher(payload),
     aprovarExcecaoRH:            () => aprovarExcecaoRH(payload),
     carregarSolicitacaoAgencia:  () => carregarSolicitacaoAgencia(payload.reqID, payload.agencia),
-    // Amadeus Self-Service (busca consultiva de preferências)
+    calcularDistancia:           () => calcularDistanciaKm(payload.origem, payload.destino),
+    // Duffel (busca consultiva de preferências)
     buscarLocaisAmadeus:   () => buscarLocaisAmadeus(payload.termo),
     buscarVoosAmadeus:     () => buscarVoosAmadeus(payload.origem, payload.destino, payload.dataIda, payload.dataVolta || null, payload.adultos),
     buscarHoteisAmadeus:   () => buscarHoteisAmadeus(payload.cityCode, payload.checkin, payload.checkout, payload.adultos),
@@ -173,6 +176,24 @@ function renderPaginaConfirmacao(acao) {
   return tmpl.evaluate().setTitle('Confirmação — Viagens Magalu');
 }
 
+// ── calcularDistanciaKm (D1) ─────────────────────────────────
+function calcularDistanciaKm(origem, destino) {
+  try {
+    const result = Maps.newDirectionFinder()
+      .setOrigin(origem + ', Brasil')
+      .setDestination(destino + ', Brasil')
+      .setMode(Maps.DirectionFinder.Mode.DRIVING)
+      .getDirections();
+    const legs = result && result.routes && result.routes[0] && result.routes[0].legs;
+    if (!legs || !legs[0]) throw new Error('Rota não encontrada');
+    const distM = legs[0].distance.value;
+    return { distanciaKm: Math.round(distM / 1000) };
+  } catch (err) {
+    Logger.log('[calcularDistanciaKm] ' + err.message);
+    return { distanciaKm: null, erro: err.message };
+  }
+}
+
 // ── inicializarPlanilha ───────────────────────────────────────
 // Cria todas as abas necessárias com headers se ainda não existirem.
 // Chamada automaticamente no início de cada doPost_proxy.
@@ -181,7 +202,7 @@ function inicializarPlanilha() {
   if (!cfg.SHEET_ID) return;
   const ss = SpreadsheetApp.openById(cfg.SHEET_ID);
 
-  // Colunas de cotação (31 por agência)
+  // Colunas de cotação (37 por agência — acrescentados 6 campos rodoviário)
   const colunasCotacao = (prefixo) => [
     `${prefixo}_aero_cia`, `${prefixo}_aero_voo`, `${prefixo}_aero_saida`,
     `${prefixo}_aero_chegada`, `${prefixo}_aero_origem`, `${prefixo}_aero_destino`,
@@ -192,46 +213,66 @@ function inicializarPlanilha() {
     `${prefixo}_hotel_categoria`, `${prefixo}_hotel_regime`, `${prefixo}_hotel_cancelamento`,
     `${prefixo}_hotel_link`, `${prefixo}_carro_locadora`, `${prefixo}_carro_categoria`,
     `${prefixo}_carro_retirada`, `${prefixo}_carro_devolucao`, `${prefixo}_carro_local`,
-    `${prefixo}_carro_seguro`, `${prefixo}_carro_valor`, `${prefixo}_obs`,
-    `${prefixo}_enviado_em`,
+    `${prefixo}_carro_seguro`, `${prefixo}_carro_valor`,
+    // Rodoviário
+    `${prefixo}_rodov_empresa`, `${prefixo}_rodov_origem`, `${prefixo}_rodov_destino`,
+    `${prefixo}_rodov_partida`, `${prefixo}_rodov_chegada`, `${prefixo}_rodov_tipo_onibus`,
+    `${prefixo}_rodov_valor`,
+    `${prefixo}_obs`, `${prefixo}_enviado_em`,
   ];
 
   const abas = {
     'Solicitacoes': [
-      'req_id', 'matricula_viajante', 'nome_viajante', 'matricula_operador', 'nome_operador',
+      'req_id', 'cpf_viajante', 'matricula_viajante', 'nome_viajante', 'matricula_operador', 'nome_operador',
       'via_delegacao', 'status', 'criado_em', 'atualizado_em', 'tipo_servico',
+      // A1 — origem
+      'origem_cidade', 'origem_estado',
       'destino_cidade', 'destino_estado', 'data_ida', 'data_volta', 'antecedencia_dias',
       'classificacao_aereo', 'motivo_viagem', 'quarto_tipo_solicitado', 'veiculo_tipo_solicitado', 'email',
-      // Preferência do viajante via Amadeus (opcional — busca consultiva)
+      // A2 — observações viajante
+      'observacoes_viajante',
+      // A3 — bagagem extra
+      'bagagem_extra',
+      // A4 — período/tipo aéreo
+      'aereo_periodo_preferido', 'aereo_tipo_trecho',
+      // A5 — rodoviário
+      'rodov_data_ida', 'rodov_data_volta', 'rodov_periodo_preferido', 'rodov_tipo_trecho', 'rodov_tipo_onibus',
+      // A6 — carro completo
+      'carro_cidade_retirada', 'carro_hora_retirada', 'carro_cidade_devolucao', 'carro_hora_devolucao',
+      // D1 — distância
+      'distancia_km', 'aereo_elegivel',
+      // Preferência do viajante via Duffel (opcional — busca consultiva)
       'preferencia_voo_cia', 'preferencia_voo_numero', 'preferencia_voo_saida', 'preferencia_voo_chegada',
       'preferencia_voo_paradas', 'preferencia_voo_bagagem', 'preferencia_voo_valor',
       'preferencia_hotel_nome', 'preferencia_hotel_estrelas', 'preferencia_hotel_diaria', 'preferencia_hotel_total',
       // Exceção saúde (9)
-      'quarto_excecao_saude', 'excecao_motivo', 'excecao_cid', 'excecao_laudo_link',
+      'quarto_excecao_saude', 'excecao_pre_aprovada', 'excecao_motivo', 'excecao_cid', 'excecao_laudo_link',
       'excecao_laudo_nome', 'excecao_validade', 'excecao_obs', 'excecao_status_rh', 'excecao_rh_em',
       // Casamento (5)
       'match_req_ids', 'match_viajantes', 'match_tipo_servico', 'match_operador', 'match_em',
-      // Aprovação N1 (6)
+      // Aprovação N1 (7)
       'aprovador_n1_email', 'aprovador_n1_nome', 'aprovador_n1_nivel',
       'aprovador_n1_acao', 'aprovador_n1_em', 'aprovador_n1_agencia',
       'aprovador_n1_email_enviado_em',
       // Aprovação N2 (5)
       'aprovador_n2_email', 'aprovador_n2_nome', 'aprovador_n2_acao', 'aprovador_n2_em',
       'aprovador_n2_email_enviado_em',
+      // E1 — pré-aprovação setor
+      'pre_aprovacao_email', 'pre_aprovacao_em',
       // RH (4)
       'rh_excecao_solicitada', 'rh_aprovador_email', 'rh_acao', 'rh_em',
       // Status geral + agência
       'status_aprovacao_geral', 'agencia_vencedora',
-      // Cotações Tastur (31)
+      // Cotações Tastur (39)
       ...colunasCotacao('cotacao_tastur'),
-      // Cotações Kontrip (31)
+      // Cotações Kontrip (39)
       ...colunasCotacao('cotacao_kontrip'),
       // Vouchers (5)
       'voucher_aereo_link', 'voucher_hotel_link', 'voucher_carro_link',
       'voucher_upload_em', 'concluido_em',
     ],
     'Viajantes': [
-      'matricula', 'nome', 'cargo', 'cod_categoria', 'filial', 'centro_custo',
+      'matricula', 'cpf', 'nome', 'cargo', 'cod_categoria', 'filial', 'centro_custo',
       'cod_centro_custo', 'empresa', 'email', 'user_name',
       'aprovador_n1_email', 'aprovador_n1_nome', 'aprovador_n2_email', 'aprovador_n2_nome',
       'sono_disturbio', 'sono_cid', 'sono_laudo_link', 'sono_validade', 'sono_obs',

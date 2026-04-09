@@ -254,4 +254,48 @@ input[readonly] { background: #f5f5f5; color: #888; cursor: default; }
   margin-top: 8px;
 }
 .field-group { position: relative; }
+
+/* ── Loading button (B2) ─────────────────────────────────── */
+.btn-spin { display: inline-block; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Campos radio inline ─────────────────────────────────── */
+.radio-group { display: flex; flex-direction: column; gap: 6px; }
+.radio-opt { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14px; }
+
+/* ── Alerta noturno rodoviário ───────────────────────────── */
+.alert-info {
+  background: #fff8e1;
+  border: 1px solid #ffe082;
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 14px;
+  color: #795548;
+}
+
+/* ── Badge distância (D1) ────────────────────────────────── */
+.badge-distancia-ok  { background:#e8f5e9; color:#2e7d32; border:1px solid #a5d6a7; }
+.badge-distancia-nok { background:#fff3e0; color:#e65100; border:1px solid #ffcc80; }
+
+/* ── Destaque check option ───────────────────────────────── */
+.check-opt.destaque {
+  font-weight: 600;
+  padding: 6px 10px;
+  background: #fff8e1;
+  border-radius: 6px;
+  border: 1px solid #ffe082;
+}
+
+/* ── Card interno ────────────────────────────────────────── */
+.card-inner {
+  background: #fafafa;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+.card-inner h3 { font-size: 15px; margin-bottom: 12px; color: #333; }
+
+/* ── Field hint ──────────────────────────────────────────── */
+.field-hint { font-size: 12px; color: #888; display: block; margin-top: 4px; }
 </style>
