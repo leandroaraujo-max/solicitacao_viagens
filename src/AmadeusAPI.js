@@ -98,11 +98,35 @@ function buscarLocaisAmadeus(termo) {
 // ── Busca de voos ────────────────────────────────────────────
 
 /**
+ * Garante que o valor informado é um código IATA válido (3 letras).
+ * Se receber um nome de cidade ou aeroporto, resolve via Places API.
+ * Lança erro se não conseguir resolver.
+ */
+function _resolverIATA(valor) {
+  if (!valor) throw new Error('Origem ou destino não informado.');
+  const v = String(valor).trim().toUpperCase();
+  // Já é IATA válido?
+  if (/^[A-Z]{3}$/.test(v)) return v;
+  // Tenta resolver como nome de cidade/aeroporto
+  Logger.log('[DUFFEL] "' + v + '" não é IATA — resolvendo via Places...');
+  var json;
+  try {
+    json = _duffelGet('/places/suggestions?query=' + encodeURIComponent(valor) + '&locale=en-GB');
+  } catch(e) {
+    throw new Error('Não foi possível resolver "' + valor + '" como código IATA: ' + e.message);
+  }
+  var locais = (json.data || []).filter(function(l) { return l.iata_code && /^[A-Z]{3}$/.test(l.iata_code); });
+  if (!locais.length) throw new Error('"' + valor + '" não encontrado. Selecione uma cidade ou aeroporto da lista de sugestões.');
+  Logger.log('[DUFFEL] "' + v + '" resolvido para IATA: ' + locais[0].iata_code + ' (' + locais[0].name + ')');
+  return locais[0].iata_code;
+}
+
+/**
  * Busca ofertas de voo via Duffel Flights API.
  * Endpoint: POST /air/offer_requests?return_offers=true
  * Nome mantido para compatibilidade com a rota no doPost_proxy.
- * @param {string} origem       — código IATA (ex: 'VCP', 'CGH')
- * @param {string} destino      — código IATA
+ * @param {string} origem       — código IATA ou nome de cidade/aeroporto
+ * @param {string} destino      — código IATA ou nome de cidade/aeroporto
  * @param {string} dataIda      — 'YYYY-MM-DD'
  * @param {string} [dataVolta]  — 'YYYY-MM-DD' (opcional)
  * @param {number} [adultos=1]
@@ -110,8 +134,11 @@ function buscarLocaisAmadeus(termo) {
 function buscarVoosAmadeus(origem, destino, dataIda, dataVolta, adultos) {
   adultos = adultos || 1;
   try {
-    var slices = [{ origin: origem, destination: destino, departure_date: dataIda }];
-    if (dataVolta) slices.push({ origin: destino, destination: origem, departure_date: dataVolta });
+    // Garante códigos IATA válidos (resolve nomes de cidade automaticamente)
+    var iataOrigem  = _resolverIATA(origem);
+    var iataDestino = _resolverIATA(destino);
+    var slices = [{ origin: iataOrigem, destination: iataDestino, departure_date: dataIda }];
+    if (dataVolta) slices.push({ origin: iataDestino, destination: iataOrigem, departure_date: dataVolta });
 
     var passengers = [];
     for (var i = 0; i < adultos; i++) passengers.push({ type: 'adult' });
