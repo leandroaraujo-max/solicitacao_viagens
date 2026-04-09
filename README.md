@@ -100,6 +100,183 @@ Viajante → [Portal Viajante] → GAS/BQ → [Portal Agência]
 ## Estrutura do Repositório
 
 ```
+src/
+├── appsscript.json       — Manifesto do projeto GAS
+├── Codigo.js             — Roteador principal (doGet / doPost / doPost_proxy)
+├── BigQuery.js           — Integração BQ + cache-aside em Sheets
+├── Solicitacoes.js       — Criação e gestão de solicitações de viagem
+├── Aprovacoes.js         — Cadeia hierárquica N1/N2 + tokens + SLA checker
+├── Casamento.js          — Motor de match entre viagens similares
+├── Delegacoes.js         — Validação de solicitações em nome de terceiros
+├── Drive.js              — Upload de laudos e vouchers PDF no Google Drive
+├── Notificacoes.js       — Templates de e-mail e GmailApp
+├── Index.html            — Portal do Viajante (frontend principal)
+├── PortalAgencia.html    — Portal do Prestador (cotação e vouchers)
+├── PortalAprovacao.html  — Página de confirmação pós-aprovação
+└── Estilos.html          — CSS compartilhado entre portais
+docs/                     — Documentação de discovery e especificação
+package.json              — Scripts npm para deploy via clasp
+```
+
+---
+
+## Arquivos GAS — Descrição Detalhada
+
+### `Codigo.js` — Roteador Principal
+
+Ponto de entrada de todas as requisições HTTP do GAS Web App.
+
+| Função | Descrição |
+|---|---|
+| `getConfig()` | Lê todas as configurações do `PropertiesService` (IDs de Sheet, Drive, e-mails, BQ, SLAs) e retorna um objeto unificado. |
+| `doGet(e)` | Roteador GET: redireciona para aprovação por token, portal da agência, página de confirmação ou portal do viajante (default). |
+| `doPost(e)` | Roteador POST via HTTP direto: deserializa o body JSON, despacha para a rota correta e retorna JSON via `ContentService`. |
+| `doPost_proxy(payload)` | Roteador chamado pelo frontend via `google.script.run`. Inicializa planilha, executa a ação solicitada e retorna `{ sucesso, dados }` ou `{ sucesso: false, erro }`. |
+| `jsonResponse(obj)` | Helper: serializa um objeto como `ContentService` JSON. |
+| `include(filename)` | Helper: inclui o conteúdo de um arquivo HTML dentro de outro (usado para `Estilos.html`). |
+| `carregarSolicitacaoAgencia(reqID, agencia)` | Busca os dados completos de uma solicitação pelo `req_id` na aba `Solicitacoes`. |
+| `renderPortalAgencia(reqID, agencia)` | Renderiza o `PortalAgencia.html` passando `reqID` e `agencia` como variáveis de template. |
+| `renderPaginaConfirmacao(acao)` | Renderiza o `PortalAprovacao.html` com a ação realizada (aprovação/reprovação). |
+| `inicializarPlanilha()` | Cria automaticamente todas as 6 abas necessárias (`Solicitacoes`, `Viajantes`, `Tokens`, `LogAprovacoes`, `MatchLog`, `Delegacoes`) com seus headers completos, caso ainda não existam. Chamada no início de cada `doPost_proxy`. |
+
+---
+
+### `BigQuery.js` — Integração BQ + Cache
+
+Implementa o padrão **cache-aside**: busca primeiro na aba `Viajantes` (cache), e só consulta o BigQuery em caso de miss.
+
+| Função | Descrição |
+|---|---|
+| `buscarViajante(matricula)` | Orquestra o fluxo completo: tenta o cache local → consulta BQ → grava no cache → retorna os dados do colaborador com categorização. |
+| `buscarViajanteCache(matricula)` | Busca o colaborador na aba `Viajantes` da Sheet. Retorna `null` se a aba não existir ou se a matrícula não for encontrada. |
+| `consultarColaboradorBQ(matricula)` | Executa query SQL no BigQuery fazendo JOIN entre `kirk.assignee` (identidade/hierarquia) e `mlpap.mag_v_funcionarios_ativos` (dados de RH). Filtra por matrícula, situação ativa e resolve os aprovadores N1 e N2 via `LEFT JOIN` encadeado. |
+| `extrairCadeiaAprovacao(matricula)` | Retorna apenas os e-mails e nomes dos aprovadores N1 e N2 a partir dos dados já resolvidos pelo BQ. |
+| `criarOuAtualizarViajante(dadosBQ)` | Grava o colaborador na aba `Viajantes` (criando a aba com header completo se necessária). Calcula automaticamente as categorias de hospedagem e veículo conforme regra R1 (cargo executivo = individual). |
+| `linhaParaObjeto(header, linha)` | Utilitário: converte um array de valores de linha de Sheet em um objeto chave-valor usando o array de headers. |
+
+---
+
+### `Solicitacoes.js` — Gestão de Solicitações
+
+Responsável por criar, validar e atualizar solicitações de viagem na aba `Solicitacoes`.
+
+| Função | Descrição |
+|---|---|
+| `submeterSolicitacao(payload)` | Orquestra a criação completa: valida o payload → gera `req_id` → calcula antecedência e classificação (Comum/Emergencial) → carrega perfil do viajante → extrai cadeia de aprovação → monta e grava a linha de 100+ colunas na Sheet → aciona o motor de casamento → dispara e-mails para as agências. |
+| `validarPayloadSolicitacao(p)` | Valida campos obrigatórios, datas futuras, ordem das datas e antecedência mínima de 2 dias para hospedagem/carro. |
+| `validarCadeiaAprovacao(cadeia, matricula)` | Alerta o setor de viagens por e-mail caso o colaborador não possua gestor N1 mapeado no BQ, sem bloquear a submissão. |
+| `gerarReqID()` | Gera um ID único no formato `REQ-{ano}-{seq4digitos}`. |
+| `submeterCotacaoAgencia(payload)` | Grava a cotação recebida da agência (prefixos `cotacao_tastur_*` ou `cotacao_kontrip_*`) nas colunas corretas da linha da solicitação. Após a segunda cotação, envia o e-mail de aprovação N1. |
+| `atualizarStatusSolicitacao(reqID, novoStatus)` | Atualiza as colunas `status` e `atualizado_em` da solicitação na Sheet. |
+| `getRequisicao(reqID)` | Busca e retorna os dados completos de uma solicitação pelo `req_id`. |
+
+---
+
+### `Aprovacoes.js` — Cadeia de Aprovação N1/N2
+
+Gerencia o fluxo de aprovação hierárquica via tokens únicos enviados por e-mail, além do SLA checker automático.
+
+| Função | Descrição |
+|---|---|
+| `processarTokenAprovacao(token)` | Valida o token recebido via URL (`?token=`): verifica status (Usado/Expirado), invalida imediatamente após uso, executa a decisão e redireciona para a página de confirmação. |
+| `executarDecisaoAprovacao(reqID, emailAprovador, decisao, token)` | Registra a ação no log, trata reprovação ou aprovação. Se N1 aprovar, verifica necessidade de N2; se não houver N2, conclui diretamente. |
+| `gerarTokensAprovacaoN1(reqID, aprovadorEmail)` | Gera 3 tokens UUID (Aprovar Tastur, Aprovar Kontrip, Reprovar), persiste na aba `Tokens` com validade de 48h e retorna os links completos. |
+| `determinarEtapaAtual(req)` | Retorna `'N1'`, `'N2'` ou `'Concluido'` com base nos campos de ação já preenchidos na solicitação. |
+| `concluirAprovacao(reqID, req, agencia)` | Avança status para `'Aprovada / Aguardando Voucher'`, registra a agência vencedora e notifica as duas agências e o viajante. |
+| `verificarNecessidadeN2(req)` | Retorna `true` se a solicitação for emergencial ou se o nível hierárquico do aprovador N1 for ≥ 4 (diretores e acima). |
+| `registrarLogAprovacao(dados)` | Insere uma linha na aba `LogAprovacoes` com todos os metadados da decisão (etapa, aprovador, ação, agência, token). |
+| `registrarAprovacaoN1(reqID, email, agencia)` | Preenche as colunas `aprovador_n1_acao`, `aprovador_n1_em` e `aprovador_n1_agencia` na solicitação. |
+| `registrarAprovacaoN2(reqID, email, agencia)` | Preenche `aprovador_n2_acao` e `aprovador_n2_em` na solicitação. |
+| `registrarAgenciaEscolhida(reqID, agencia)` | Grava a agência vencedora na coluna `agencia_vencedora`. |
+| `verificarSLAs()` | **Time-based trigger (a cada 30min).** Percorre todas as solicitações em aberto e aciona os verificadores de SLA por status. |
+| `verificarSLACotacao(row, agora, cfg)` | Envia até 2 lembretes às agências quando o SLA de cotação (24h) é ultrapassado. |
+| `verificarSLAAprovacaoN1(row, agora, cfg)` | Para emergenciais: escala para N2 ao vencer o SLA de 4h. Para comuns: envia até 2 lembretes e então encaminha para aprovação manual. |
+| `verificarSLAAprovacaoN2(row, agora, cfg)` | Notifica o setor de viagens com alerta crítico quando N2 não responde em 8h. |
+| `aprovarExcecaoRH(payload)` | Stub — fluxo de aprovação RH desabilitado no MVP (Decisão D15). Retorna mensagem informativa sem executar ação. |
+| `paginaErroHtml(mensagem)` | Renderiza uma página HTML de erro simples para tokens inválidos ou expirados. |
+
+---
+
+### `Casamento.js` — Motor de Match
+
+Identifica automaticamente viagens similares que poderiam compartilhar hospedagem ou veículo.
+
+| Função | Descrição |
+|---|---|
+| `verificarCasamento(reqID)` | Chamado após cada nova solicitação. Compara destino e datas (tolerância ≤ 1 dia) com solicitações elegíveis. Se houver match de quarto, veículo ou ambos, registra no `MatchLog` e notifica o setor. |
+| `vincularSolicitacoes(reqID1, reqID2, operadorEmail)` | Vincula duas solicitações em um grupo, gera um `GRP-{ano}-{seq}`, atualiza os campos de match em ambas e registra no `MatchLog`. |
+| `ignorarMatch(reqID1, reqID2, operadorEmail, motivo)` | Marca um match como ignorado no `MatchLog` e atualiza os campos de controle nas solicitações envolvidas. |
+| `buscarCompatibilidadeColega(matriculaColega, matriculaViajante)` | Verifica se dois colaboradores são compatíveis para compartilhar quarto e/ou veículo com base em suas categorias de hospedagem e veículo. |
+| `registrarMatchLog(reqOrigem, reqCompativel, tipo, acao, operador)` | Insere uma linha na aba `MatchLog` com os dados do par de solicitações identificado. |
+| `atualizarCampoSolicitacao(reqID, campo, valor)` | Utilitário genérico para atualizar um único campo de uma solicitação pelo `req_id`. |
+
+---
+
+### `Delegacoes.js` — Solicitações em Nome de Terceiros
+
+Valida se um operador (ex.: secretária) tem autorização ativa para solicitar viagens em nome de outro colaborador.
+
+| Função | Descrição |
+|---|---|
+| `validarDelegacao(matriculaOperador, matriculaViajante)` | Se operador = viajante, retorna `{ tipo: 'proprio' }` sem consultar a Sheet. Caso contrário, busca uma delegação ativa na aba `Delegacoes`, valida status e prazo de validade. Lança erro descritivo em caso de revogação ou expiração. |
+| `expirarDelegacoesVencidas()` | **Time-based trigger (diário).** Percorre a aba `Delegacoes` e atualiza para `'Expirado'` todas as delegações com `validade_ate` anterior à data atual. |
+
+---
+
+### `Drive.js` — Armazenamento de Arquivos
+
+Gerencia o upload e armazenamento de PDFs no Google Drive.
+
+| Função | Descrição |
+|---|---|
+| `salvarExcecaoQuartoIndividual(payload)` | Decodifica o PDF em Base64 recebido do frontend, cria o arquivo na pasta de Laudos Médicos (acesso restrito), e atualiza o perfil do viajante (`contexto: 'perfil'`) ou a solicitação específica. |
+| `uploadVoucher(payload)` | Valida que a solicitação está no status correto, salva o PDF do voucher na pasta de Vouchers (acesso público por link) e atualiza a coluna correspondente. Após todos os vouchers necessários, chama `verificarConclusaoVouchers`. |
+| `verificarConclusaoVouchers(reqID, req)` | Verifica se todos os vouchers dos serviços contratados foram enviados. Se sim, atualiza status para `'Concluída'` e envia o e-mail com os links ao viajante. |
+| `enviarVouchersAoViajante(req)` | Envia e-mail HTML ao viajante com os links dos vouchers de aéreo, hospedagem e carro disponíveis. |
+| `atualizarLaudoViajante(matricula, dados)` | Atualiza os campos de necessidade especial (sono/mobilidade/outra condição) na linha do viajante na aba `Viajantes`. |
+| `atualizarExcecaoSolicitacao(reqID, dados)` | Atualiza os campos de exceção de saúde (`excecao_motivo`, `excecao_cid`, `excecao_laudo_link`, etc.) na linha da solicitação. |
+
+---
+
+### `Notificacoes.js` — E-mails e Comunicações
+
+Centraliza todos os templates de e-mail HTML e despachos via `GmailApp`.
+
+| Função | Descrição |
+|---|---|
+| `dispararEmailAgencias(reqID, viajante, solicitacao, classificacao)` | Envia e-mail HTML para Tastur e Kontrip com dados da viagem, prazo de cotação (4h se emergencial, 24h se comum) e link exclusivo para o portal. |
+| `enviarEmailAprovacaoN1(reqID, req, cadeia)` | Envia e-mail ao aprovador N1 com tabela comparativa das cotações e três botões de ação (Aprovar Tastur / Aprovar Kontrip / Reprovar), cada um com token único de 48h. |
+| `enviarEmailAprovacaoN2(reqID, req, emailN1, agenciaEscolhidaN1)` | Envia e-mail ao aprovador N2 informando a decisão do N1 e solicitando confirmação. Se não houver N2, notifica o setor para aprovação manual. |
+| `notificarRHExcecaoSaude(reqID, viajante, solicitacao)` | **MVP: desabilitada (D15).** Stub que apenas registra no log. Prevista para V2. |
+| `notificarViajanteSolicitacaoAprovada(req, agencia)` | Envia e-mail ao viajante informando aprovação e agência responsável pela reserva. |
+| `notificarReprovacao(req, emailAprovador, etapa)` | Notifica o viajante sobre a reprovação informando a etapa (N1/N2) e o contato do setor. |
+| `notificarAgenciaVencedora(req, agencia)` | Avisa a agência selecionada que deve emitir o voucher. |
+| `notificarAgenciaPerdedora(req, agenciaVencedora)` | Informa à agência não selecionada que sua cotação não foi escolhida. |
+| `notificarSetorMatchEncontrado(req, candidato, tipo)` | Alerta o setor de viagens sobre duas solicitações similares identificadas pelo motor de casamento. |
+| `notificarSetorAprovacaoManual(req)` | Alerta o setor quando uma solicitação fica sem aprovador válido e requer intervenção manual. |
+| `notificarSetorAlertaCritico(req, motivo)` | Envia alerta crítico ao setor (ex.: N2 sem resposta há X horas). |
+| `enviarLembreteCotacao(req)` | Envia lembrete às duas agências para cotações próximas do vencimento do SLA. |
+| `enviarLembreteAprovacao(req, etapa)` | Envia lembrete ao aprovador N1 ou N2 quando o SLA de aprovação está se aproximando. |
+| `montarTabelaComparativa(req)` | Gera HTML de tabela com cotações Tastur vs Kontrip para o e-mail de aprovação N1. |
+| `formatBRL(valor)` | Formata um número como moeda BRL (ex.: `R$ 1.234,56`). |
+| `props()` | Atalho para `PropertiesService.getScriptProperties()`. |
+
+---
+
+### Interfaces HTML
+
+| Arquivo | Descrição |
+|---|---|
+| `Index.html` | **Portal do Viajante.** Interface principal para identificação por matrícula, seleção do tipo de solicitação (própria ou delegada), preenchimento dos dados da viagem (destino, datas, tipo de serviço, colega de viagem) e submissão. Chama o servidor via `google.script.run`. |
+| `PortalAgencia.html` | **Portal do Prestador.** Interface exclusiva por link tokenizado para que a agência preencha a cotação (dados de aéreo, hospedagem e carro) e faça upload dos vouchers em PDF, em momentos distintos do fluxo. |
+| `PortalAprovacao.html` | **Página de Confirmação.** Renderizada após o clique em um link de aprovação/reprovação, confirmando ao aprovador que a ação foi registrada. |
+| `Estilos.html` | **CSS Compartilhado.** Folha de estilos incluída via `<?!= include('Estilos'); ?>` em todos os portais. Define o design system com as cores Magalu (azul `#0086FF`, amarelo `#FFCE00`). |
+
+---
+
+## Estrutura do Repositório
+
+```
 solicitacao_viagens/
 ├── README.md
 ├── docs/

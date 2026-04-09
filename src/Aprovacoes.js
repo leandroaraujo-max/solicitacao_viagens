@@ -128,11 +128,6 @@ function determinarEtapaAtual(req) {
   return 'Concluido';
 }
 
-function verificarNecessidadeN2(req) {
-  return req.classificacao_aereo === 'Emergencial' ||
-    parseInt(req.aprovador_n1_nivel || 0) >= 4;   // Diretor ou acima
-}
-
 function concluirAprovacao(reqID, req, agencia) {
   atualizarStatusSolicitacao(reqID, 'Aprovada / Aguardando Voucher');
   registrarAgenciaEscolhida(reqID, agencia);
@@ -283,6 +278,15 @@ function verificarSLAAprovacaoN2(row, agora, cfg) {
 }
 
 // ── Páginas de erro/sucesso HTML ─────────────────────────────
+/**
+ * Aprovação de exceção de saúde pelo RH/Medicina do Trabalho.
+ * [MVP] Fluxo RH desabilitado (D15) — função mantida para não quebrar as rotas.
+ */
+function aprovarExcecaoRH(payload) {
+  Logger.log(`[RH] aprovarExcecaoRH chamado para reqID=${payload.reqID} — descartado no MVP (D15).`);
+  return { aprovado: false, motivo: 'Fluxo RH não habilitado no MVP.' };
+}
+
 function paginaErroHtml(mensagem) {
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
     <style>body{font-family:sans-serif;text-align:center;padding:60px;color:#333}

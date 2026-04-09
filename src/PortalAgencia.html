@@ -362,14 +362,25 @@ function enviarCotacao() {
       seguro:     document.querySelector('[name="carroSeguro"]:checked')?.value === 'true',
       valor:      parseFloat(document.getElementById('carroValor')?.value),
     },
-    observacoes: document.getElementById('cotacaoObs')?.value,
+    obs: document.getElementById('cotacaoObs')?.value,
   };
+
+  // Envia apenas seções cujos campos estão visíveis (serviço solicitado)
+  if (document.getElementById('secaoAereo').classList.contains('hidden'))      delete payload.aereo;
+  if (document.getElementById('secaoHospedagem').classList.contains('hidden')) delete payload.hospedagem;
+  if (document.getElementById('secaoCarro').classList.contains('hidden'))      delete payload.carro;
 
   document.getElementById('btnEnviarCotacao').disabled = true;
   document.getElementById('btnEnviarCotacao').textContent = 'Enviando...';
 
   google.script.run
-    .withSuccessHandler(() => {
+    .withSuccessHandler(r => {
+      if (!r.sucesso) {
+        mostrarAlerta(r.erro || 'Erro ao enviar cotação.', 'erro');
+        document.getElementById('btnEnviarCotacao').disabled = false;
+        document.getElementById('btnEnviarCotacao').textContent = '📤 Enviar Cotação';
+        return;
+      }
       document.getElementById('formCotacao').classList.add('hidden');
       document.getElementById('step-confirmacao').classList.remove('hidden');
       document.getElementById('msgConfirmacao').textContent = '✅ Cotação enviada com sucesso!';

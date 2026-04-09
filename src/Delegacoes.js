@@ -14,6 +14,7 @@ function validarDelegacao(matriculaOperador, matriculaViajante) {
 
   const cfg   = getConfig();
   const sheet = SpreadsheetApp.openById(cfg.SHEET_ID).getSheetByName('Delegacoes');
+  if (!sheet) throw new Error('Aba Delegacoes não encontrada. Contate o administrador.');
   const dados = sheet.getDataRange().getValues();
   const h     = dados[0];
 

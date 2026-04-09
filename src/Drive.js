@@ -150,6 +150,7 @@ function enviarVouchersAoViajante(req) {
 function atualizarLaudoViajante(matricula, dados) {
   const cfg   = getConfig();
   const sheet = SpreadsheetApp.openById(cfg.SHEET_ID).getSheetByName('Viajantes');
+  if (!sheet) throw new Error('Aba Viajantes não encontrada.');
   const linhas = sheet.getDataRange().getValues();
   const h      = linhas[0];
   const idxMat = h.indexOf('matricula');

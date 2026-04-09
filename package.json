@@ -1,0 +1,16 @@
+{
+  "name": "portal-viagens-magalu",
+  "version": "1.0.0",
+  "description": "Portal de Solicitação de Viagens Corporativas — Magalu / Luizalabs",
+  "scripts": {
+    "push": "node \"%APPDATA%/npm/node_modules/@google/clasp/build/src/index.js\" push",
+    "deploy": "node \"%APPDATA%/npm/node_modules/@google/clasp/build/src/index.js\" push && node \"%APPDATA%/npm/node_modules/@google/clasp/build/src/index.js\" deploy --deploymentId \"AKfycbzi3Cy5rJ2pB2QH1B7p-d7HUw9xNPwF1pUrUS6lDRmznQ-Ss1X2js_YNr3wK6vBSTTh\"",
+    "deployments": "node \"%APPDATA%/npm/node_modules/@google/clasp/build/src/index.js\" deployments",
+    "open": "node \"%APPDATA%/npm/node_modules/@google/clasp/build/src/index.js\" open",
+    "pull": "node \"%APPDATA%/npm/node_modules/@google/clasp/build/src/index.js\" pull"
+  },
+  "clasp": {
+    "deploymentId": "AKfycbzi3Cy5rJ2pB2QH1B7p-d7HUw9xNPwF1pUrUS6lDRmznQ-Ss1X2js_YNr3wK6vBSTTh",
+    "url": "https://script.google.com/macros/s/AKfycbzi3Cy5rJ2pB2QH1B7p-d7HUw9xNPwF1pUrUS6lDRmznQ-Ss1X2js_YNr3wK6vBSTTh/exec"
+  }
+}

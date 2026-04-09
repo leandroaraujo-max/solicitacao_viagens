@@ -1,4 +1,17 @@
 {
   "scriptId": "157FO7diD5kMP3FWh6tkFvPveElKHhVzJKrdPMqTvaQw-sce_wTq4jwXX",
-  "rootDir": "./src"
+  "rootDir": "src",
+  "projectId": "&\"C:\\Program Files\\nodejs\\node.exe\" \"C:\\Users\\Leandro\\AppData\\Roaming\\npm\\node_modules\\@google\\clasp\\build\\src\\index.js\" push",
+  "scriptExtensions": [
+    ".js",
+    ".gs"
+  ],
+  "htmlExtensions": [
+    ".html"
+  ],
+  "jsonExtensions": [
+    ".json"
+  ],
+  "filePushOrder": [],
+  "skipSubdirectories": false
 }

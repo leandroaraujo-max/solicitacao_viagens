@@ -50,22 +50,25 @@ function submeterSolicitacao(payload) {
     antecedenciaDias,
     classificacao,
     payload.motivo_viagem || '',
-    viajante.categoria_hospedagem,
-    viajante.categoria_veiculo,
+    viajante.categoria_hospedagem,   // quarto_tipo_solicitado
+    viajante.categoria_veiculo,      // veiculo_tipo_solicitado
     // Exceção de saúde (preenchida depois via salvarExcecaoQuartoIndividual)
     payload.quarto_excecao_saude || false, '', '', '', '', '', '', '', '',
     // Casamento (preenchido pelo motor)
     '', '', '', '', '',
-    // Aprovação
+    // Aprovação N1 (6) + email_enviado_em (1)
     cadeia.n1_email || '', cadeia.n1_nome || '', cadeia.n1_nivel || '',
-    '', '', '',  // n1 acao/em/agencia
+    '', '', '', '',
+    // Aprovação N2 (4) + email_enviado_em (1)
     cadeia.n2_email || '', cadeia.n2_nome || '',
-    '', '',       // n2 acao/em
-    payload.quarto_excecao_saude || false, '', '', '', // rh
-    'Aguardando Cotação',  // status_aprovacao_geral
-    // Cotações Tastur/Kontrip — iniciam vazias (25 colunas cada)
-    ...Array(50).fill(''),
-    // Voucher
+    '', '', '',
+    // RH (4)
+    payload.quarto_excecao_saude || false, '', '', '',
+    // Status geral + agência
+    'Aguardando Cotação', '',
+    // Cotações Tastur + Kontrip — 31 colunas cada = 62 vazias
+    ...Array(62).fill(''),
+    // Voucher (5)
     '', '', '', '', ''
   ];
 
@@ -129,6 +132,93 @@ function gerarReqID() {
   const ano  = new Date().getFullYear();
   const seq  = Math.floor(Math.random() * 9000) + 1000;
   return `REQ-${ano}-${seq}`;
+}
+
+/**
+ * Grava cotação enviada pela agência na aba Solicitacoes.
+ */
+function submeterCotacaoAgencia(payload) {
+  if (!payload.reqID)   throw new Error('ID da solicitação não informado.');
+  if (!payload.agencia) throw new Error('Identificação da agência não informada.');
+
+  const cfg   = getConfig();
+  const sheet = SpreadsheetApp.openById(cfg.SHEET_ID).getSheetByName('Solicitacoes');
+  const dados  = sheet.getDataRange().getValues();
+  const header = dados[0];
+  const idxReq = header.indexOf('req_id');
+
+  // Prefixo de coluna baseado na agência: cotacao_tastur_* ou cotacao_kontrip_*
+  const prefixo = payload.agencia.toLowerCase() === 'tastur' ? 'cotacao_tastur' : 'cotacao_kontrip';
+
+  const campos = {};
+  // Aéreo
+  if (payload.aereo) {
+    campos[`${prefixo}_aero_cia`]        = payload.aereo.cia            || '';
+    campos[`${prefixo}_aero_voo`]        = payload.aereo.voo            || '';
+    campos[`${prefixo}_aero_saida`]      = payload.aereo.saida          || '';
+    campos[`${prefixo}_aero_chegada`]    = payload.aereo.chegada        || '';
+    campos[`${prefixo}_aero_origem`]     = payload.aereo.origem         || '';
+    campos[`${prefixo}_aero_destino`]    = payload.aereo.destino        || '';
+    campos[`${prefixo}_aero_classe`]     = payload.aereo.classe         || '';
+    campos[`${prefixo}_aero_bagagem`]    = payload.aereo.bagagem        || false;
+    campos[`${prefixo}_aero_conexao`]    = payload.aereo.conexao        || false;
+    campos[`${prefixo}_aero_escala`]     = payload.aereo.escala         || '';
+    campos[`${prefixo}_aero_valor`]      = payload.aereo.valor          || 0;
+    campos[`${prefixo}_aero_validade`]   = payload.aereo.validade       || '';
+  }
+  // Hospedagem
+  if (payload.hospedagem) {
+    campos[`${prefixo}_hotel_nome`]      = payload.hospedagem.nome      || '';
+    campos[`${prefixo}_hotel_endereco`]  = payload.hospedagem.endereco  || '';
+    campos[`${prefixo}_hotel_checkin`]   = payload.hospedagem.checkin   || '';
+    campos[`${prefixo}_hotel_checkout`]  = payload.hospedagem.checkout  || '';
+    campos[`${prefixo}_hotel_diaria`]    = payload.hospedagem.diaria    || 0;
+    campos[`${prefixo}_hotel_total`]     = payload.hospedagem.total     || 0;
+    campos[`${prefixo}_hotel_categoria`] = payload.hospedagem.categoria || '';
+    campos[`${prefixo}_hotel_regime`]    = payload.hospedagem.regime    || '';
+    campos[`${prefixo}_hotel_cancelamento`] = payload.hospedagem.cancelamento || '';
+    campos[`${prefixo}_hotel_link`]      = payload.hospedagem.link      || '';
+  }
+  // Carro
+  if (payload.carro) {
+    campos[`${prefixo}_carro_locadora`]  = payload.carro.locadora       || '';
+    campos[`${prefixo}_carro_categoria`] = payload.carro.categoria      || '';
+    campos[`${prefixo}_carro_retirada`]  = payload.carro.retirada       || '';
+    campos[`${prefixo}_carro_devolucao`] = payload.carro.devolucao      || '';
+    campos[`${prefixo}_carro_local`]     = payload.carro.local          || '';
+    campos[`${prefixo}_carro_seguro`]    = payload.carro.seguro         || false;
+    campos[`${prefixo}_carro_valor`]     = payload.carro.valor          || 0;
+  }
+  campos[`${prefixo}_obs`]               = payload.obs                  || '';
+  campos[`${prefixo}_enviado_em`]        = new Date();
+
+  // Grava cada campo mapeado na linha correspondente
+  for (let i = 1; i < dados.length; i++) {
+    if (String(dados[i][idxReq]) !== String(payload.reqID)) continue;
+
+    Object.entries(campos).forEach(([col, val]) => {
+      const idx = header.indexOf(col);
+      if (idx >= 0) sheet.getRange(i + 1, idx + 1).setValue(val);
+    });
+
+    // Atualiza status para 'Cotação Parcial' ou 'Aguardando Aprovação N1'
+    const idxStatus = header.indexOf('status');
+    const statusAtual = String(dados[i][idxStatus]);
+    const novoStatus = statusAtual === 'Cotação Parcial' ? 'Aguardando Aprovação N1' : 'Cotação Parcial';
+    sheet.getRange(i + 1, idxStatus + 1).setValue(novoStatus);
+    sheet.getRange(i + 1, header.indexOf('atualizado_em') + 1).setValue(new Date());
+
+    // Se ambas agências cotaram → dispara e-mail de aprovação N1
+    if (novoStatus === 'Aguardando Aprovação N1') {
+      const req = linhaParaObjeto(header, sheet.getRange(i + 1, 1, 1, header.length).getValues()[0]);
+      const cadeia = extrairCadeiaAprovacao(req.matricula_viajante);
+      enviarEmailAprovacaoN1(payload.reqID, req, cadeia);
+      atualizarStatusSolicitacao(payload.reqID, 'Pendente Aprovação N1');
+    }
+    break;
+  }
+
+  return { reqID: payload.reqID, agencia: payload.agencia };
 }
 
 function atualizarStatusSolicitacao(reqID, novoStatus) {

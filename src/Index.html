@@ -225,7 +225,10 @@ function buscarOperador() {
   if (!mat) return alertar('Informe sua matrícula.');
   setLoading('infoOperador', true);
   google.script.run
-    .withSuccessHandler(r => onOperadorEncontrado(r.dados))
+    .withSuccessHandler(r => {
+      if (!r.sucesso) { setErro('infoOperador', r.erro); return; }
+      onOperadorEncontrado(r.dados);
+    })
     .withFailureHandler(e => setErro('infoOperador', e.message))
     .doPost_proxy({ acao: 'buscarViajante', matricula: mat });
 }
@@ -269,7 +272,10 @@ function buscarColega() {
   const matV = estado.viajante?.matricula;
   if (!mat || !matV) return;
   google.script.run
-    .withSuccessHandler(r => renderizarCompatibilidadeColega(r.dados))
+    .withSuccessHandler(r => {
+      if (!r.sucesso) { console.error('[buscarColega]', r.erro); return; }
+      renderizarCompatibilidadeColega(r.dados);
+    })
     .withFailureHandler(e => console.error(e))
     .doPost_proxy({ acao: 'buscarCompatibildade', matriculaColega: mat, matriculaViajante: matV });
 }
@@ -414,6 +420,12 @@ function submeterSolicitacao() {
 
   google.script.run
     .withSuccessHandler(r => {
+      if (!r.sucesso) {
+        alertar(r.erro || 'Erro ao enviar solicitação.');
+        document.getElementById('btnSubmeter').disabled = false;
+        document.getElementById('btnSubmeter').textContent = 'Enviar solicitação ✓';
+        return;
+      }
       document.getElementById('step-viagem').classList.add('hidden');
       document.getElementById('step-protocolo').classList.remove('hidden');
       document.getElementById('protocoloGerado').textContent = r.dados.reqID;
@@ -452,11 +464,11 @@ function setErro(id, msg) {
 
 function alertar(msg) { alert(msg); }
 
-// Proxy para chamar doPost do GAS com o payload correto
-function doPost_proxy(payload) {
-  // Esta função é um alias — o GAS não tem "doPost_proxy",
-  // então usamos google.script.run com a função real
-}
+// Nota: doPost_proxy NÃO é chamada diretamente aqui.
+// google.script.run.doPost_proxy(payload) invoca a função
+// homônima definida no servidor (Codigo.gs). Este stub
+// existe apenas para evitar erros caso seja referenciada.
+function doPost_proxy(payload) { /* server-side only */ }
 </script>
 </body>
 </html>

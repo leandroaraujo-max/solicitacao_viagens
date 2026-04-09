@@ -31,9 +31,12 @@ function buscarViajante(matricula) {
 function buscarViajanteCache(matricula) {
   const cfg   = getConfig();
   const sheet = SpreadsheetApp.openById(cfg.SHEET_ID).getSheetByName('Viajantes');
+  if (!sheet) return null;  // aba ainda não criada
   const dados = sheet.getDataRange().getValues();
+  if (dados.length <= 1) return null;  // apenas header ou vazia
   const header = dados[0];
   const idxMat = header.indexOf('matricula');
+  if (idxMat < 0) return null;  // header incorreto
 
   for (let i = 1; i < dados.length; i++) {
     if (String(dados[i][idxMat]) === String(matricula)) {
@@ -89,14 +92,14 @@ function consultarColaboradorBQ(matricula) {
     LEFT JOIN \`${tA}\` AS g2
       ON g1.superior = g2.id AND g2.active = TRUE
     WHERE t1.CUSTOM1 = '${matricula}'
-      AND t2.SITUACAO = 'Ativo'
+      AND t2.SITUACAO NOT IN ('Desligado', 'Demitido', 'Afastado', 'Aposentado', 'Férias', 'Inativo')
       AND t1.active = TRUE
     LIMIT 1
   `;
 
   try {
     const request  = { query, useLegacySql: false, timeoutMs: 8000 };
-    const response = BigQuery.Jobs.query(cfg.BQ_PROJECT_ID, request);
+    const response = BigQuery.Jobs.query(request, cfg.BQ_PROJECT_ID);
 
     if (!response.rows || response.rows.length === 0) return null;
 
@@ -135,9 +138,25 @@ function extrairCadeiaAprovacao(matricula) {
  *   dadosBQ.aprovador_n2_* → dois níveis acima
  */
 function criarOuAtualizarViajante(dadosBQ) {
-  const cfg   = getConfig();
-  const sheet = SpreadsheetApp.openById(cfg.SHEET_ID).getSheetByName('Viajantes');
+  const cfg = getConfig();
+  const ss  = SpreadsheetApp.openById(cfg.SHEET_ID);
   const agora = new Date();
+
+  // Cria aba Viajantes com header se ainda não existir
+  let sheet = ss.getSheetByName('Viajantes');
+  if (!sheet) {
+    sheet = ss.insertSheet('Viajantes');
+    sheet.appendRow([
+      'matricula','nome','cargo','cod_categoria','filial','centro_custo',
+      'cod_centro_custo','empresa','email','user_name',
+      'aprovador_n1_email','aprovador_n1_nome','aprovador_n2_email','aprovador_n2_nome',
+      'sono_disturbio','sono_cid','sono_laudo_link','sono_validade','sono_obs',
+      'mobilidade_restrita','mobilidade_obs','mobilidade_laudo_link',
+      'outra_condicao','outra_cid','outra_laudo_link','outra_obs',
+      'categoria_hospedagem','categoria_veiculo',
+      'motivo_categoria_hosp','motivo_categoria_veic','atualizado_em'
+    ]);
+  }
 
   // Regra R1: cargo de alto nível → hospedagem individual desde o início
   const cargosExecutivos = ['Diretor', 'VP', 'Vice-Presidente', 'CEO', 'CFO', 'CTO', 'COO', 'CSO', 'CHRO'];
