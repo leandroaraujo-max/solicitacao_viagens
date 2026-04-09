@@ -2,6 +2,114 @@
 // Notificacoes.gs — Templates de e-mail e GmailApp
 // ============================================================
 
+// ── NOVO FLUXO ────────────────────────────────────────────────
+// 1. submeterSolicitacao  → enviarEmailAprovacaoLideranca (N1 govern.)
+// 2. N1 AprovaViagem      → dispararEmailAgencias
+// 3. Ambas agências cotam → enviarEmailAprovacaoSetor (EMAIL_VIAGENS)
+// 4. Setor aprova cotação → notificarAgenciaVencedora (com link voucher)
+// 5. Voucher enviado      → enviarVouchersFinalizacao (solicitante + setor)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Envia e-mail à LIDERANÇA DIRETA para aprovação de governança.
+ * A liderança NÃO escolhe agência — apenas aprova/reprova a necessidade.
+ */
+function enviarEmailAprovacaoLideranca(reqID, viajante, solicitacao, classificacao, cadeia) {
+  const cfg     = getConfig();
+  const n1Email = (cadeia.n1_email || '').toLowerCase();
+  const n1Nome  = cadeia.n1_nome || 'Aprovador';
+  if (!n1Email) {
+    Logger.log(`[AVISO] Sem e-mail N1 para req ${reqID} — liderança não notificada.`);
+    // Sem liderança mapeada: pula direto para agências
+    const vi = { nome: viajante.nome, categoria_hospedagem: viajante.categoria_hospedagem, motivo_categoria_hosp: '' };
+    dispararEmailAgencias(reqID, vi, solicitacao, classificacao);
+    atualizarStatusSolicitacao(reqID, 'Aguardando Cotação');
+    return;
+  }
+
+  const tokens  = gerarTokensAprovacaoN1(reqID, n1Email);
+  const dataIda = Utilities.formatDate(new Date(solicitacao.data_ida),   'America/Sao_Paulo', 'dd/MM/yyyy');
+  const dataVolta = Utilities.formatDate(new Date(solicitacao.data_volta), 'America/Sao_Paulo', 'dd/MM/yyyy');
+  const emergBanner = classificacao === 'Emergencial'
+    ? `<div style="background:#ffebee;border-left:4px solid #e53935;padding:12px;margin-bottom:16px">
+        <strong>VIAGEM EMERGENCIAL</strong> — Aprovação necessária com urgência.
+       </div>` : '';
+
+  const html = `
+    <div style="font-family:sans-serif;max-width:600px;margin:auto">
+      <div style="background:#0086FF;padding:20px;border-radius:8px 8px 0 0">
+        <h2 style="color:#fff;margin:0">Solicitação de Viagem — Aprovação Necessária</h2>
+        <p style="color:#FFCE00;margin:4px 0 0">Protocolo: <strong>${reqID}</strong></p>
+      </div>
+      <div style="background:#fff;padding:24px;border:1px solid #e0e0e0;border-top:none">
+        ${emergBanner}
+        <p>Prezado(a) <strong>${n1Nome}</strong>,</p>
+        <p>O(a) colaborador(a) <strong>${viajante.nome}</strong> solicitou uma viagem e sua aprovação é necessária para fins de governança.</p>
+        <table style="width:100%;border-collapse:collapse;margin:16px 0">
+          <tr><td style="padding:8px;color:#666">Destino:</td><td style="padding:8px;font-weight:600">${solicitacao.destino_cidade} / ${solicitacao.destino_estado || ''}</td></tr>
+          <tr style="background:#f5f5f5"><td style="padding:8px;color:#666">Período:</td><td style="padding:8px;font-weight:600">${dataIda} → ${dataVolta}</td></tr>
+          <tr><td style="padding:8px;color:#666">Serviços:</td><td style="padding:8px;font-weight:600">${Array.isArray(solicitacao.tipo_servico) ? solicitacao.tipo_servico.join(', ') : solicitacao.tipo_servico}</td></tr>
+          <tr style="background:#f5f5f5"><td style="padding:8px;color:#666">Motivo:</td><td style="padding:8px">${solicitacao.motivo_viagem || '—'}</td></tr>
+          <tr><td style="padding:8px;color:#666">Classificação:</td><td style="padding:8px"><strong>${classificacao}</strong></td></tr>
+        </table>
+        <p style="color:#555;font-size:13px">Após sua aprovação, o setor de viagens será acionado para obter as cotações das agências credenciadas.</p>
+        <div style="text-align:center;margin:28px 0;display:flex;gap:12px;justify-content:center">
+          <a href="${tokens.linkAprova}"  style="background:#2e7d32;color:#fff;padding:14px 28px;border-radius:6px;text-decoration:none;font-weight:bold">Aprovar Viagem</a>
+          <a href="${tokens.linkReprova}" style="background:#c62828;color:#fff;padding:14px 28px;border-radius:6px;text-decoration:none;font-weight:bold">Reprovar</a>
+        </div>
+        <p style="color:#999;font-size:12px">Links válidos por 72 horas. Cada link é de uso único.</p>
+      </div>
+    </div>`;
+
+  GmailApp.sendEmail(n1Email,
+    `[APROVAÇÃO NECESSÁRIA] Viagem de ${viajante.nome} para ${solicitacao.destino_cidade} | ${reqID}`,
+    '', { htmlBody: html, name: 'Sistema de Viagens Magalu', replyTo: cfg.EMAIL_VIAGENS });
+  Logger.log(`[LIDERANÇA EMAIL] Enviado para: ${n1Email} | req: ${reqID}`);
+}
+
+/**
+ * Envia e-mail ao SETOR DE VIAGENS (EMAIL_VIAGENS) com as cotações para escolha da agência.
+ */
+function enviarEmailAprovacaoSetor(reqID, req) {
+  const cfg    = getConfig();
+  const email  = (cfg.EMAIL_VIAGENS || '').toLowerCase();
+  if (!email) { Logger.log(`[AVISO] EMAIL_VIAGENS não configurado.`); return; }
+
+  const tokens = gerarTokensSetor(reqID, email);
+  const tabelaCotacao = montarTabelaComparativa(req);
+  const dataIda   = req.data_ida   ? Utilities.formatDate(new Date(req.data_ida),   'America/Sao_Paulo', 'dd/MM/yyyy') : '—';
+  const dataVolta = req.data_volta ? Utilities.formatDate(new Date(req.data_volta), 'America/Sao_Paulo', 'dd/MM/yyyy') : '—';
+
+  const html = `
+    <div style="font-family:sans-serif;max-width:660px;margin:auto">
+      <div style="background:#0086FF;padding:20px;border-radius:8px 8px 0 0">
+        <h2 style="color:#fff;margin:0">Cotações Recebidas — Aprovação do Setor</h2>
+        <p style="color:#FFCE00;margin:4px 0 0">Protocolo: <strong>${reqID}</strong></p>
+      </div>
+      <div style="background:#fff;padding:24px;border:1px solid #e0e0e0;border-top:none">
+        <p>As duas agências enviaram suas cotações para a viagem abaixo. Selecione a agência aprovada:</p>
+        <table style="width:100%;border-collapse:collapse;margin:12px 0 20px">
+          <tr><td style="padding:8px;color:#666">Viajante:</td><td style="padding:8px;font-weight:600">${req.nome_viajante}</td></tr>
+          <tr style="background:#f5f5f5"><td style="padding:8px;color:#666">Destino:</td><td style="padding:8px;font-weight:600">${req.destino_cidade} / ${req.destino_estado || ''}</td></tr>
+          <tr><td style="padding:8px;color:#666">Período:</td><td style="padding:8px;font-weight:600">${dataIda} → ${dataVolta}</td></tr>
+          <tr style="background:#f5f5f5"><td style="padding:8px;color:#666">Serviços:</td><td style="padding:8px">${req.tipo_servico || '—'}</td></tr>
+        </table>
+        ${tabelaCotacao}
+        <div style="text-align:center;margin:28px 0;display:flex;gap:12px;justify-content:center">
+          <a href="${tokens.linkTastur}"  style="background:#2e7d32;color:#fff;padding:14px 24px;border-radius:6px;text-decoration:none;font-weight:bold">Aprovar — Tastur</a>
+          <a href="${tokens.linkKontrip}" style="background:#1565c0;color:#fff;padding:14px 24px;border-radius:6px;text-decoration:none;font-weight:bold">Aprovar — Kontrip</a>
+          <a href="${tokens.linkReprova}" style="background:#c62828;color:#fff;padding:14px 24px;border-radius:6px;text-decoration:none;font-weight:bold">Reprovar</a>
+        </div>
+        <p style="color:#999;font-size:12px">Links válidos por 48 horas. Cada link é de uso único.</p>
+      </div>
+    </div>`;
+
+  GmailApp.sendEmail(email,
+    `[COTAÇÕES RECEBIDAS] ${req.nome_viajante} → ${req.destino_cidade} | ${reqID}`,
+    '', { htmlBody: html, name: 'Sistema de Viagens Magalu' });
+  Logger.log(`[SETOR EMAIL] Enviado para: ${email} | req: ${reqID}`);
+}
+
 /**
  * Dispara e-mails para as duas agências credenciadas com link exclusivo.
  */
@@ -14,13 +122,52 @@ function dispararEmailAgencias(reqID, viajante, solicitacao, classificacao) {
 
   agencias.forEach(ag => {
     const tokenAg = Utilities.getUuid();
-    const linkAg  = `${cfg.WEBAPP_URL}?reqID=${reqID}&tipo=agencia&ag=${ag.nome.toLowerCase()}&token=${tokenAg}`;
+    const linkAg  = `${cfg.WEBAPP_URL}?reqID=${reqID}&tipo=agencia&ag=${ag.nome.toLowerCase()}`;
     const dataIda  = Utilities.formatDate(new Date(solicitacao.data_ida),   'America/Sao_Paulo', 'dd/MM/yyyy');
     const dataVolta = Utilities.formatDate(new Date(solicitacao.data_volta), 'America/Sao_Paulo', 'dd/MM/yyyy');
 
     const emissor = classificacao === 'Emergencial'
       ? `<p style="color:#e53935;font-weight:bold">⚠ VIAGEM EMERGENCIAL — Prazo de cotação: 4 horas</p>`
       : `<p>Prazo para envio da cotação: <strong>24 horas</strong></p>`;
+
+    // Bloco de preferência do viajante (Amadeus) — se preenchida
+    const temVoo   = solicitacao.preferencia_voo_cia   && solicitacao.preferencia_voo_cia   !== '';
+    const temHotel = solicitacao.preferencia_hotel_nome && solicitacao.preferencia_hotel_nome !== '';
+    let blocoPreferencia = '';
+    if (temVoo || temHotel) {
+      let linhasVoo = '';
+      if (temVoo) {
+        const paradas = parseInt(solicitacao.preferencia_voo_paradas) === 0 ? 'Direto' : solicitacao.preferencia_voo_paradas + ' parada(s)';
+        const bagagem = solicitacao.preferencia_voo_bagagem == 1 || solicitacao.preferencia_voo_bagagem === 'true' ? 'Inclusa' : 'Não inclusa';
+        linhasVoo = `
+          <tr><td colspan="2" style="padding:8px;background:#E3F2FD;font-weight:700;color:#0086FF">✈ Voo de Referência</td></tr>
+          <tr><td style="padding:6px 8px;color:#666">Voo</td><td style="padding:6px 8px;font-weight:600">${solicitacao.preferencia_voo_cia} ${solicitacao.preferencia_voo_numero}</td></tr>
+          <tr style="background:#f5f5f5"><td style="padding:6px 8px;color:#666">Partida</td><td style="padding:6px 8px">${solicitacao.preferencia_voo_saida || '—'}</td></tr>
+          <tr><td style="padding:6px 8px;color:#666">Chegada</td><td style="padding:6px 8px">${solicitacao.preferencia_voo_chegada || '—'}</td></tr>
+          <tr style="background:#f5f5f5"><td style="padding:6px 8px;color:#666">Paradas</td><td style="padding:6px 8px">${paradas}</td></tr>
+          <tr><td style="padding:6px 8px;color:#666">Bagagem</td><td style="padding:6px 8px">${bagagem}</td></tr>
+          <tr style="background:#f5f5f5"><td style="padding:6px 8px;color:#666">Valor de referência</td><td style="padding:6px 8px;font-weight:700">R$ ${parseFloat(solicitacao.preferencia_voo_valor || 0).toFixed(2)}</td></tr>`;
+      }
+      let linhasHotel = '';
+      if (temHotel) {
+        linhasHotel = `
+          <tr><td colspan="2" style="padding:8px;background:#E3F2FD;font-weight:700;color:#0086FF">🏨 Hospedagem de Referência</td></tr>
+          <tr><td style="padding:6px 8px;color:#666">Hotel</td><td style="padding:6px 8px;font-weight:600">${solicitacao.preferencia_hotel_nome}</td></tr>
+          <tr style="background:#f5f5f5"><td style="padding:6px 8px;color:#666">Categoria</td><td style="padding:6px 8px">${solicitacao.preferencia_hotel_estrelas || '—'} ★</td></tr>
+          <tr><td style="padding:6px 8px;color:#666">Diária de referência</td><td style="padding:6px 8px;font-weight:700">R$ ${parseFloat(solicitacao.preferencia_hotel_diaria || 0).toFixed(2)}</td></tr>
+          <tr style="background:#f5f5f5"><td style="padding:6px 8px;color:#666">Total de referência</td><td style="padding:6px 8px;font-weight:700">R$ ${parseFloat(solicitacao.preferencia_hotel_total || 0).toFixed(2)}</td></tr>`;
+      }
+      blocoPreferencia = `
+        <div style="margin-top:20px;border:2px solid #0086FF;border-radius:6px;overflow:hidden">
+          <div style="background:#0086FF;padding:10px 14px">
+            <strong style="color:#fff">💡 Preferência do Viajante</strong>
+            <span style="color:#FFCE00;font-size:12px;margin-left:8px">Use como referência para a cotação</span>
+          </div>
+          <table style="width:100%;border-collapse:collapse">
+            ${linhasVoo}${linhasHotel}
+          </table>
+        </div>`;
+    }
 
     const html = `
       <div style="font-family:sans-serif;max-width:600px;margin:auto">
@@ -44,9 +191,10 @@ function dispararEmailAgencias(reqID, viajante, solicitacao, classificacao) {
             <tr><td style="padding:8px;color:#666">Hospedagem:</td>
                 <td style="padding:8px;font-weight:600">${viajante.categoria_hospedagem} (${viajante.motivo_categoria_hosp})</td></tr>
           </table>
+          ${blocoPreferencia}
           <div style="text-align:center;margin-top:28px">
             <a href="${linkAg}" style="background:#0086FF;color:#fff;padding:14px 32px;border-radius:6px;text-decoration:none;font-size:16px;font-weight:bold">
-              📋 Acessar Portal e Enviar Cotação
+              Acessar Portal e Enviar Cotação
             </a>
           </div>
           <p style="color:#999;font-size:12px;margin-top:24px">
@@ -94,15 +242,15 @@ function enviarEmailAprovacaoN1(reqID, req, cadeia) {
               ✅ <strong>Quarto Individual</strong> — Exceção de saúde aprovada pelo RH.
              </p>` : ''}
         <div style="text-align:center;margin:28px 0">
-          <a href="${tokens.linkTastur}"  style="background:#2e7d32;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;margin:4px;display:inline-block">✅ Aprovar — Tastur</a>
-          <a href="${tokens.linkKontrip}" style="background:#1565c0;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;margin:4px;display:inline-block">✅ Aprovar — Kontrip</a>
-          <a href="${tokens.linkReprova}" style="background:#c62828;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;margin:4px;display:inline-block">❌ Reprovar</a>
+          <a href="${tokens.linkTastur}"  style="background:#2e7d32;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;margin:4px;display:inline-block">Aprovar — Tastur</a>
+          <a href="${tokens.linkKontrip}" style="background:#1565c0;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;margin:4px;display:inline-block">Aprovar — Kontrip</a>
+          <a href="${tokens.linkReprova}" style="background:#c62828;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;margin:4px;display:inline-block">Reprovar</a>
         </div>
         <p style="color:#999;font-size:12px">Links válidos por 48 horas. Cada link é de uso único.</p>
       </div>
     </div>`;
 
-  GmailApp.sendEmail(cadeia.n1_email,
+  GmailApp.sendEmail((cadeia.n1_email || '').toLowerCase(),
     `[APROVAÇÃO NECESSÁRIA] Viagem — ${req.nome_viajante} → ${req.destino_cidade} | ${reqID}`,
     '', { htmlBody: html, name: 'Sistema de Viagens Magalu', replyTo: cfg.EMAIL_VIAGENS });
 }
@@ -162,8 +310,9 @@ function notificarRHExcecaoSaude(reqID, viajante, solicitacao) { // eslint-disab
  * Notifica o viajante/operador que a solicitação foi aprovada.
  */
 function notificarViajanteSolicitacaoAprovada(req, agencia) {
+  if (!req.email) { Logger.log(`[AVISO] Sem email viajante para notificar (req: ${req.req_id})`); return; }
   const cfg = getConfig();
-  GmailApp.sendEmail(req.email || '',
+  GmailApp.sendEmail(req.email,
     `✅ Viagem aprovada — ${req.req_id} | ${req.destino_cidade}`, '', {
       htmlBody: `<p>Olá, <strong>${req.nome_viajante}</strong>!</p>
         <p>Sua solicitação <strong>${req.req_id}</strong> foi <span style="color:#2e7d32">aprovada</span>.</p>
@@ -174,8 +323,9 @@ function notificarViajanteSolicitacaoAprovada(req, agencia) {
 }
 
 function notificarReprovacao(req, emailAprovador, etapa) {
+  if (!req.email) { Logger.log(`[AVISO] Sem email viajante para notificar reprovação (req: ${req.req_id})`); return; }
   const cfg = getConfig();
-  GmailApp.sendEmail(req.email || '',
+  GmailApp.sendEmail(req.email,
     `❌ Viagem reprovada — ${req.req_id}`, '',
     { htmlBody: `<p>Sua solicitação <strong>${req.req_id}</strong> foi reprovada pelo aprovador ${etapa}.</p>
        <p>Em caso de dúvidas, contate o setor de viagens: ${cfg.EMAIL_VIAGENS}</p>`,
@@ -183,13 +333,32 @@ function notificarReprovacao(req, emailAprovador, etapa) {
 }
 
 function notificarAgenciaVencedora(req, agencia) {
-  const cfg       = getConfig();
-  const emailAg   = agencia === 'Tastur' ? props().getProperty('EMAIL_TASTUR') : props().getProperty('EMAIL_KONTRIP');
+  const cfg      = getConfig();
+  const emailAg  = agencia === 'Tastur' ? props().getProperty('EMAIL_TASTUR') : props().getProperty('EMAIL_KONTRIP');
+  const agSlug   = agencia.toLowerCase(); // 'tastur' ou 'kontrip'
+  const linkPortal = `${cfg.WEBAPP_URL}?reqID=${req.req_id}&tipo=agencia&ag=${agSlug}`;
+
   GmailApp.sendEmail(emailAg,
-    `✅ [Viagens Magalu] Cotação aprovada — ${req.req_id} — Aguardando Voucher`, '',
-    { htmlBody: `<p>A cotação do protocolo <strong>${req.req_id}</strong> foi aprovada.<br>
-       Por favor, emita o voucher e faça o upload no portal.<br>
-       Viajante: <strong>${req.nome_viajante}</strong></p>`,
+    `✅ [Viagens Magalu] Cotação APROVADA — ${req.req_id} — Realizar compra e enviar voucher`, '',
+    { htmlBody: `
+      <div style="font-family:sans-serif;max-width:580px">
+        <div style="background:#2e7d32;padding:18px;border-radius:8px 8px 0 0">
+          <h2 style="color:#fff;margin:0">Cotação Aprovada — ${agencia}</h2>
+          <p style="color:#c8e6c9;margin:4px 0 0">Protocolo: <strong>${req.req_id}</strong></p>
+        </div>
+        <div style="background:#fff;padding:20px;border:1px solid #e0e0e0;border-top:none">
+          <p>A cotação de <strong>${agencia}</strong> para o protocolo <strong>${req.req_id}</strong> foi <strong style="color:#2e7d32">aprovada</strong>.</p>
+          <p><strong>Viajante:</strong> ${req.nome_viajante}<br>
+             <strong>Destino:</strong> ${req.destino_cidade} / ${req.destino_estado || ''}</p>
+          <p>Por favor, realize a compra e faça o upload do(s) voucher(s) no portal:</p>
+          <div style="text-align:center;margin:24px 0">
+            <a href="${linkPortal}" style="background:#0086FF;color:#fff;padding:14px 32px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:16px">
+              Acessar Portal — Upload de Voucher
+            </a>
+          </div>
+          <p style="color:#999;font-size:12px">Em caso de dúvidas, contate: ${cfg.EMAIL_VIAGENS}</p>
+        </div>
+      </div>`,
       name: 'Sistema de Viagens Magalu', replyTo: cfg.EMAIL_VIAGENS });
 }
 
@@ -258,18 +427,18 @@ function enviarLembreteAprovacao(req, etapa) {
 // ── Helpers ──────────────────────────────────────────────────
 function montarTabelaComparativa(req) {
   // Monta tabela HTML com cotações Tastur vs Kontrip
-  // Os campos tastur_* e kontrip_* já estão na linha da solicitação
+  // Os campos estão sob as chaves cotacao_tastur_aero_* e cotacao_kontrip_aero_*
   const linhas = [
-    ['Companhia / Hotel', req.tastur_aereo_cia    || req.tastur_hotel_nome    || '-',
-                          req.kontrip_aereo_cia   || req.kontrip_hotel_nome   || '-'],
-    ['Valor Total',       formatBRL(req.tastur_aereo_valor    || req.tastur_hotel_total    || 0),
-                          formatBRL(req.kontrip_aereo_valor   || req.kontrip_hotel_total   || 0)],
-    ['Saída / Check-in',  req.tastur_aereo_saida  || req.tastur_hotel_checkin  || '-',
-                          req.kontrip_aereo_saida || req.kontrip_hotel_checkin || '-'],
-    ['Bagagem inclusa',   req.tastur_aereo_bagagem  ? '✅ Sim' : '❌ Não',
-                          req.kontrip_aereo_bagagem ? '✅ Sim' : '❌ Não'],
-    ['Validade cotação',  req.tastur_aereo_validade_cotacao  || '-',
-                          req.kontrip_aereo_validade_cotacao || '-'],
+    ['Companhia / Hotel', req.cotacao_tastur_aero_cia    || req.cotacao_tastur_hotel_nome    || '-',
+                          req.cotacao_kontrip_aero_cia   || req.cotacao_kontrip_hotel_nome   || '-'],
+    ['Valor Total',       formatBRL(req.cotacao_tastur_aero_valor    || req.cotacao_tastur_hotel_total    || 0),
+                          formatBRL(req.cotacao_kontrip_aero_valor   || req.cotacao_kontrip_hotel_total   || 0)],
+    ['Saída / Check-in',  req.cotacao_tastur_aero_saida  || req.cotacao_tastur_hotel_checkin  || '-',
+                          req.cotacao_kontrip_aero_saida || req.cotacao_kontrip_hotel_checkin || '-'],
+    ['Bagagem inclusa',   req.cotacao_tastur_aero_bagagem  ? '✅ Sim' : '❌ Não',
+                          req.cotacao_kontrip_aero_bagagem ? '✅ Sim' : '❌ Não'],
+    ['Validade cotação',  req.cotacao_tastur_aero_validade  || '-',
+                          req.cotacao_kontrip_aero_validade || '-'],
   ];
 
   const linhasHtml = linhas.map(([label, t, k]) =>

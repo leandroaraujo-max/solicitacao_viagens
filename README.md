@@ -1,22 +1,46 @@
 # Portal de Solicitação de Viagens Corporativas
 
 > **Projeto:** Automação do processo de viagens corporativas Magalu / Luizalabs  
-> **Stack:** Google Apps Script · BigQuery · Google Sheets · Google Drive  
-> **Status:** 🟡 Discovery concluído — MVP em especificação  
-> **Data de início do discovery:** 08/04/2026  
+> **Stack:** Google Apps Script · BigQuery · Google Sheets · Google Drive · Duffel Flights API  
+> **Status:** 🟢 MVP em produção — Deploy @37  
+> **Data de início:** 08/04/2026  
+> **Último deploy:** 09/04/2026 — @37  
 
 ---
 
 ## Sumário
 
+- [Status do Projeto](#status-do-projeto)
 - [Visão Geral](#visão-geral)
 - [Problema](#problema)
 - [Solução](#solução)
+- [Fluxo de Aprovação Atual](#fluxo-de-aprovação-atual)
 - [Atores do Sistema](#atores-do-sistema)
 - [Documentação](#documentação)
 - [Stack Técnica](#stack-técnica)
 - [Estrutura do Repositório](#estrutura-do-repositório)
-- [Próximos Passos](#próximos-passos)
+- [Próximos Passos v2](#próximos-passos-v2)
+
+---
+
+## Status do Projeto
+
+| Componente | Status |
+|---|---|
+| Portal do Viajante (`Index.html`) | ✅ Produção |
+| Portal da Agência (`PortalAgencia.html`) | ✅ Produção |
+| Portal de Aprovação (`PortalAprovacao.html`) | ✅ Produção |
+| Fluxo Liderança → Agências → Setor | ✅ Produção |
+| Integração BigQuery (cache-aside) | ✅ Produção |
+| Casamento de solicitações | ✅ Produção |
+| Delegações | ✅ Produção |
+| Busca consultiva de voos — Duffel API | ✅ Produção (sandbox) |
+| Preferência de hospedagem (campo livre) | ✅ Produção |
+| Upload de vouchers | ✅ Produção |
+| SLA checker (time-based trigger) | ✅ Produção |
+
+**Deploy ativo:** `AKfycbzi3Cy5rJ2pB2QH1B7p-d7HUw9xNPwF1pUrUS6lDRmznQ-Ss1X2js_YNr3wK6vBSTTh` @37  
+**Script ID:** `157FO7diD5kMP3FWh6tkFvPveElKHhVzJKrdPMqTvaQw-sce_wTq4jwXX`
 
 ---
 
@@ -40,14 +64,32 @@ O processo atual (AS-IS) opera inteiramente via e-mail sem estrutura, gerando:
 
 ## Solução
 
-Um **portal web** com quatro interfaces distintas, integrando:
+Um **portal web** com uma URL de entrada única, composto por quatro interfaces distintas:
+
+- **Portal do Viajante** — acessado diretamente via URL pública pelo colaborador
+- **Portal da Agência** — acessado via link exclusivo por `reqID` enviado por e-mail após cada nova solicitação
+- **Portal de Aprovação** — acessado via link tokenizado enviado por e-mail ao gestor N1/N2
+- **Confirmação de Ação** — página simples exibida após o clique no link de aprovação/reprovação
 
 ```
-Viajante → [Portal Viajante] → GAS/BQ → [Portal Agência]
-                                    ↓
-                          [Portal Aprovadores]
-                                    ↓
-                         [Painel Setor de Viagens]
+[URL pública] → Portal do Viajante → submete solicitação
+                                          ↓
+                              GAS gera links exclusivos
+                                          ↓
+                              [e-mail para Liderança N1]
+                              Portal de Aprovação →
+                              aprova/reprova via token único
+                                          ↓ (se aprovado)
+                    ┌─────────────────────────────────────┐
+                    │ e-mail para Tastur + e-mail Kontrip  │
+                    │ Portal da Agência → envia cotação    │
+                    └─────────────────────────────────────┘
+                                          ↓ (ambas cotaram)
+                              [e-mail do Setor de Viagens]
+                              Tabela comparativa + botões de decisão
+                                          ↓ (setor escolhe agência)
+                    [e-mail agência vencedora → upload voucher]
+                    [e-mail viajante → links dos vouchers]
 ```
 
 ---
@@ -56,12 +98,12 @@ Viajante → [Portal Viajante] → GAS/BQ → [Portal Agência]
 
 | Ator | Acesso | Responsabilidade |
 |---|---|---|
-| **Viajante** | Portal Viajante (HTML público autenticado por matrícula) | Solicita a viagem |
+| **Viajante** | Portal Viajante (HTML público autenticado por CPF/matrícula) | Solicita a viagem |
 | **Operador** | Portal Viajante (modo delegação) | Secretaria que solicita em nome de outro |
 | **Agência (Tastur / Kontrip)** | Portal Prestador (link exclusivo por reqID) | Insere cotações e vouchers |
-| **Gestor N1 / N2** | Link de aprovação por e-mail (token único) | Aprova ou reprova a solicitação |
-| **RH / Medicina do Trabalho** | Link de aprovação por e-mail | Valida laudos de exceção de saúde |
-| **Setor de Viagens** | Painel interno (Sheet + portal GAS) | Coordena todo o processo |
+| **Gestor N1** | Link de aprovação por e-mail (token único 72h) | Aprova ou reprova a necessidade da viagem |
+| **Gestor N2** | Link de aprovação por e-mail (fallback SLA ou emergencial) | Aprovação de segundo nível |
+| **Setor de Viagens** | E-mail com tabela comparativa + tokens de decisão | Escolhe a agência vencedora |
 
 ---
 
@@ -93,6 +135,7 @@ Viajante → [Portal Viajante] → GAS/BQ → [Portal Agência]
 | Banco Transacional | Google Sheets | Solicitações, status, workflow |
 | Armazenamento | Google Drive | Vouchers PDF e laudos médicos |
 | E-mail | GmailApp (GAS) | Notificações e aprovações |
+| Busca de Voos | Duffel Flights API | Busca consultiva de voos reais (sandbox) |
 | Dashboards (V2) | Looker Studio | Analytics de custos |
 
 ---
@@ -110,6 +153,7 @@ src/
 ├── Delegacoes.js         — Validação de solicitações em nome de terceiros
 ├── Drive.js              — Upload de laudos e vouchers PDF no Google Drive
 ├── Notificacoes.js       — Templates de e-mail e GmailApp
+├── AmadeusAPI.js         — Integração Duffel Flights API (busca consultiva de voos)
 ├── Index.html            — Portal do Viajante (frontend principal)
 ├── PortalAgencia.html    — Portal do Prestador (cotação e vouchers)
 ├── PortalAprovacao.html  — Página de confirmação pós-aprovação
@@ -238,9 +282,28 @@ Gerencia o upload e armazenamento de PDFs no Google Drive.
 
 ---
 
-### `Notificacoes.js` — E-mails e Comunicações
+### `AmadeusAPI.js` — Integração Duffel Flights API
 
-Centraliza todos os templates de e-mail HTML e despachos via `GmailApp`.
+Integração com a [Duffel Flights API](https://duffel.com/docs) para busca consultiva de voos reais.
+O viajante pesquisa e seleciona uma preferência de voo antes de submeter a solicitação.
+Essa preferência é exibida às agências no email e no portal de cotação, eliminando
+o ciclo de questionamentos entre setor e solicitante.
+
+> **Nota:** O arquivo se chama `AmadeusAPI.js` por retrocompatibilidade com as rotas do `doPost_proxy`.
+> Internamente usa 100% a Duffel API (o Amadeus Self-Service foi desativado em jul/2026).
+
+| Função | Descrição |
+|---|---|
+| `_duffelToken()` | Lê o `DUFFEL_TOKEN` das Script Properties. |
+| `_duffelGet(path)` | GET autenticado na API Duffel com headers `Authorization` e `Duffel-Version`. |
+| `_duffelPost(path, body)` | POST autenticado na API Duffel. |
+| `buscarLocaisAmadeus(termo)` | Autocomplete de aeroportos/cidades via `GET /places/suggestions`. |
+| `buscarVoosAmadeus(origem, destino, dataIda, dataVolta, adultos)` | Busca ofertas de voo via `POST /air/offer_requests`. Retorna array normalizado com cia, número do voo, horários, paradas, bagagem e valor. |
+| `buscarHoteisAmadeus()` | Stub — retorna array vazio. Preferência de hotel é campo de texto livre no frontend. |
+
+**Script Property necessária:** `DUFFEL_TOKEN` = `duffel_test_...` (painel: More → Developers → Access Tokens)
+
+---
 
 | Função | Descrição |
 |---|---|
@@ -303,9 +366,53 @@ solicitacao_viagens/
 
 ---
 
-## Próximos Passos
+## Próximos Passos v2
 
-1. Validar pontos em aberto listados em [11 - Pendências](docs/11-pendencias-decisao.md)
-2. Confirmar schema do BigQuery (campo de gestor direto e hierarquia)
-3. Compartilhar template de e-mail e vouchers de exemplo para mapear campos
-4. Iniciar desenvolvimento do MVP — Portal do Viajante (Fase 1)
+Melhorias planejadas para a próxima versão (ver plano completo no histórico do chat):
+
+**Sprint 1 — UX imediato:**
+- [ ] B2 — Indicador visual de loading em todos os botões
+- [ ] B3 — Link para Política de Viagens Magalu no header
+- [ ] B1 — Centro de custo + código no perfil do viajante e nos e-mails
+
+**Sprint 2 — Campos do formulário:**
+- [ ] A1 — Origem da viagem (cidade/estado)
+- [ ] A2 — Campo observações do viajante
+- [ ] A3 — Bagagem extra despachada
+- [ ] A4 — Período preferido (manhã/tarde/noite) + tipo (ida/volta/ambos)
+- [ ] B4 — Motivo e observações exibidos nos e-mails e portal da agência
+- [ ] E2 — E-mail de reprovação com nome do gestor + só viajante recebe
+
+**Sprint 3 — Novos modais de transporte:**
+- [ ] A5 — Transporte rodoviário + alerta ônibus leito (19h–06h)
+- [ ] A6 — Locação de veículo com campos completos (retirada/devolução/hora)
+
+**Sprint 4 — Regras de negócio:**
+- [ ] D1 — Bloqueio de aéreo para distâncias < 400km (Maps Distance Matrix)
+- [ ] C1 — Busca por CPF em vez de matrícula (compliance LGPD)
+
+**Sprint 5 — Dados e aprovações:**
+- [ ] E3 — Condição especial: verificar cadastro existente, não pedir laudo de novo
+- [ ] C2 — Verificar férias do N1 → fallback automático para N2
+
+**Sprint 6 — Fluxo de aprovação (arquitetural):**
+- [ ] E1 — Pré-aprovação do Setor de Viagens antes das agências cotarem
+- [ ] E1 — DL para e-mails do setor (`DL_VIAGENS` Script Property)
+
+---
+
+## Script Properties necessárias
+
+| Chave | Descrição |
+|---|---|
+| `SHEET_ID` | ID da Google Sheet principal |
+| `PASTA_LAUDOS_ID` | ID da pasta Drive para laudos médicos |
+| `PASTA_VOUCHERS_ID` | ID da pasta Drive para vouchers |
+| `EMAIL_VIAGENS` | E-mail do setor de viagens (aprovação de cotações) |
+| `EMAIL_TASTUR` | E-mail da agência Tastur |
+| `EMAIL_KONTRIP` | E-mail da agência Kontrip |
+| `BQ_PROJECT_ID` | ID do projeto BigQuery |
+| `BQ_TABLE_ASSIGNEE` | `maga-bigdata.kirk.assignee` |
+| `BQ_TABLE_FUNCIONARIOS` | `maga-bigdata.mlpap.mag_v_funcionarios_ativos` |
+| `WEBAPP_URL` | URL pública do Web App GAS |
+| `DUFFEL_TOKEN` | Token da Duffel API (painel: More → Developers → Access Tokens) |

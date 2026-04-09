@@ -52,52 +52,90 @@ function processarTokenAprovacao(token) {
 
 /**
  * Executa a decisão de aprovação e avança o fluxo.
+ * Fluxo:
+ *   AprovaViagem  (liderança) → dispara e-mails às agências, status = 'Aguardando Cotação'
+ *   ReprovaViagem (liderança) → status = 'Reprovada', notifica viajante
+ *   AprovaTastur / AprovaKontrip (setor) → conclui, notifica agência vencedora
+ *   Reprova       (setor) → status = 'Reprovada', notifica viajante
  */
 function executarDecisaoAprovacao(reqID, emailAprovador, decisao, token) {
   const req = getRequisicao(reqID);
   if (!req) throw new Error(`Solicitação ${reqID} não encontrada.`);
 
-  const etapa = determinarEtapaAtual(req);
-  const cfg   = getConfig();
-
-  // Registra no LogAprovacoes
   registrarLogAprovacao({
-    reqID, matriculaViajante: req.matricula_viajante,
-    matriculaOperador: req.matricula_operador,
-    etapa, aprovadorEmail: emailAprovador,
-    acao: decisao.startsWith('Aprova') ? 'Aprovado' : 'Reprovado',
-    agenciaEscolhida: decisao === 'AprovaTastur' ? 'Tastur' : decisao === 'AprovaKontrip' ? 'Kontrip' : '',
-    tokenUtilizado: token
+    reqID,
+    matriculaViajante:  req.matricula_viajante,
+    matriculaOperador:  req.matricula_operador,
+    etapa:              (decisao === 'AprovaViagem' || decisao === 'ReprovaViagem') ? 'Liderança' : 'Setor',
+    aprovadorEmail:     emailAprovador,
+    acao:               decisao.startsWith('Aprova') ? 'Aprovado' : 'Reprovado',
+    agenciaEscolhida:   decisao === 'AprovaTastur' ? 'Tastur' : decisao === 'AprovaKontrip' ? 'Kontrip' : '',
+    tokenUtilizado:     token
   });
 
-  if (decisao === 'Reprova') {
-    atualizarStatusSolicitacao(reqID, 'Reprovada');
-    notificarReprovacao(req, emailAprovador, etapa);
+  if (decisao === 'AprovaViagem') {
+    // Liderança aprovou a necessidade da viagem → dispara cotação às agências
+    atualizarStatusSolicitacao(reqID, 'Aguardando Cotação');
+    const vi = { nome: req.nome_viajante, categoria_hospedagem: req.quarto_tipo_solicitado, motivo_categoria_hosp: '' };
+    dispararEmailAgencias(reqID, vi, req, req.classificacao_aereo);
+    Logger.log(`[LIDERANÇA APROVOU] ${reqID} — agências notificadas`);
     return;
   }
 
-  const agenciaEscolhida = decisao === 'AprovaTastur' ? 'Tastur' : 'Kontrip';
-
-  if (etapa === 'N1') {
-    registrarAprovacaoN1(reqID, emailAprovador, agenciaEscolhida);
-    const precisaN2 = verificarNecessidadeN2(req);
-    if (precisaN2) {
-      atualizarStatusSolicitacao(reqID, 'Pendente Aprovação N2');
-      enviarEmailAprovacaoN2(reqID, req, emailAprovador, agenciaEscolhida);
-    } else {
-      concluirAprovacao(reqID, req, agenciaEscolhida);
-    }
-  } else if (etapa === 'N2') {
-    registrarAprovacaoN2(reqID, emailAprovador, agenciaEscolhida);
-    concluirAprovacao(reqID, req, agenciaEscolhida);
+  if (decisao === 'ReprovaViagem') {
+    atualizarStatusSolicitacao(reqID, 'Reprovada');
+    notificarReprovacao(req, emailAprovador, 'Liderança');
+    return;
   }
+
+  if (decisao === 'AprovaTastur' || decisao === 'AprovaKontrip') {
+    // Setor de viagens aprovou a cotação e escolheu a agência
+    const agencia = decisao === 'AprovaTastur' ? 'Tastur' : 'Kontrip';
+    concluirAprovacao(reqID, req, agencia);
+    return;
+  }
+
+  if (decisao === 'Reprova') {
+    atualizarStatusSolicitacao(reqID, 'Reprovada');
+    notificarReprovacao(req, emailAprovador, 'Setor');
+    return;
+  }
+
+  throw new Error(`Decisão desconhecida: ${decisao}`);
 }
 
 /**
- * Gera e persiste tokens de aprovação para N1.
- * Retorna os links para uso no e-mail.
+ * Gera tokens de aprovação para a LIDERANÇA DIRETA.
+ * Decisões possíveis: AprovaViagem (gov) ou ReprovaViagem.
+ * Validade: 72h
  */
 function gerarTokensAprovacaoN1(reqID, aprovadorEmail) {
+  const cfg    = getConfig();
+  const sheet  = SpreadsheetApp.openById(cfg.SHEET_ID).getSheetByName('Tokens');
+  const expira = new Date();
+  expira.setHours(expira.getHours() + 72);
+
+  const tokens = {
+    aprova:  Utilities.getUuid(),
+    reprova: Utilities.getUuid(),
+  };
+
+  const agora = new Date();
+  sheet.appendRow([tokens.aprova,  reqID, aprovadorEmail, 'AprovaViagem',  expira, 'Pendente', '', agora]);
+  sheet.appendRow([tokens.reprova, reqID, aprovadorEmail, 'ReprovaViagem', expira, 'Pendente', '', agora]);
+
+  return {
+    linkAprova:  `${cfg.WEBAPP_URL}?token=${tokens.aprova}`,
+    linkReprova: `${cfg.WEBAPP_URL}?token=${tokens.reprova}`,
+  };
+}
+
+/**
+ * Gera tokens de aprovação das COTAÇÕES para o SETOR DE VIAGENS (EMAIL_VIAGENS).
+ * Decisões: AprovaTastur, AprovaKontrip ou Reprova.
+ * Validade: 48h
+ */
+function gerarTokensSetor(reqID, emailSetor) {
   const cfg    = getConfig();
   const sheet  = SpreadsheetApp.openById(cfg.SHEET_ID).getSheetByName('Tokens');
   const expira = new Date();
@@ -110,9 +148,9 @@ function gerarTokensAprovacaoN1(reqID, aprovadorEmail) {
   };
 
   const agora = new Date();
-  sheet.appendRow([tokens.tastur,  reqID, aprovadorEmail, 'AprovaTastur',  expira, 'Pendente', '', agora]);
-  sheet.appendRow([tokens.kontrip, reqID, aprovadorEmail, 'AprovaKontrip', expira, 'Pendente', '', agora]);
-  sheet.appendRow([tokens.reprova, reqID, aprovadorEmail, 'Reprova',       expira, 'Pendente', '', agora]);
+  sheet.appendRow([tokens.tastur,  reqID, emailSetor, 'AprovaTastur',  expira, 'Pendente', '', agora]);
+  sheet.appendRow([tokens.kontrip, reqID, emailSetor, 'AprovaKontrip', expira, 'Pendente', '', agora]);
+  sheet.appendRow([tokens.reprova, reqID, emailSetor, 'Reprova',       expira, 'Pendente', '', agora]);
 
   return {
     linkTastur:  `${cfg.WEBAPP_URL}?token=${tokens.tastur}`,

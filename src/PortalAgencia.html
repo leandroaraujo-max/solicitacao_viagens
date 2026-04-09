@@ -29,6 +29,22 @@
     <div id="alertaStatus" class="alert hidden"></div>
   </div>
 
+  <!-- Preferência do viajante (Amadeus) — leitura para a agência -->
+  <div id="blocoPreferencia" class="card hidden">
+    <h2 class="card-title" style="color:#0086FF">💡 Preferência do Viajante</h2>
+    <p class="field-hint" style="margin-bottom:12px">
+      O viajante selecionou as opções abaixo como referência. Use como base para a cotação.
+    </p>
+    <div id="preferenciaVoo" class="hidden">
+      <h3 style="font-size:15px;margin:0 0 6px">✈ Voo de Referência</h3>
+      <div class="perfil-grid" id="preferenciaVooDados"></div>
+    </div>
+    <div id="preferenciaHotel" class="hidden" style="margin-top:16px">
+      <h3 style="font-size:15px;margin:0 0 6px">🏨 Hospedagem de Referência</h3>
+      <div class="perfil-grid" id="preferenciaHotelDados"></div>
+    </div>
+  </div>
+
   <!-- Formulário de cotação (exibido conforme tipo de serviço) -->
   <div id="formCotacao" class="card hidden">
     <h2 class="card-title">Inserir Cotação</h2>
@@ -221,6 +237,13 @@
       </div>
     </div>
 
+    <!-- PDF da Cotação -->
+    <div class="field-group">
+      <label>PDF da Cotação (opcional — máx 5MB)</label>
+      <input type="file" id="cotacaoPdf" accept=".pdf" onchange="carregarPdfCotacao(this)" />
+      <span id="pdfCotacaoStatus" class="field-hint"></span>
+    </div>
+
     <!-- Observações gerais -->
     <div class="field-group">
       <label for="cotacaoObs">Observações gerais</label>
@@ -267,22 +290,34 @@ document.addEventListener('DOMContentLoaded', () => carregarSolicitacao());
 
 function carregarSolicitacao() {
   google.script.run
-    .withSuccessHandler(r => renderizarSolicitacao(r.dados))
-    .withFailureHandler(e => mostrarAlerta(e.message, 'erro'))
+    .withSuccessHandler(r => {
+      if (!r || !r.sucesso) {
+        mostrarAlerta('Erro ao carregar solicitação: ' + (r && r.erro ? r.erro : 'Resposta inválida do servidor.'), 'erro');
+        return;
+      }
+      renderizarSolicitacao(r.dados);
+    })
+    .withFailureHandler(e => mostrarAlerta('Falha de comunicação: ' + e.message, 'erro'))
     .doPost_proxy({ acao: 'carregarSolicitacaoAgencia', reqID: REQ_ID, agencia: AGENCIA });
 }
 
 function renderizarSolicitacao(req) {
   solicitacao = req;
+  // Normaliza tipo_servico: pode vir como string CSV ou array
+  if (typeof req.tipo_servico === 'string') {
+    req.tipo_servico = req.tipo_servico.split(',').map(s => s.trim()).filter(Boolean);
+  } else if (!Array.isArray(req.tipo_servico)) {
+    req.tipo_servico = [];
+  }
   const el    = document.getElementById('dadosSolicitacao');
   el.innerHTML = `
     <span><label>Viajante</label><strong>${req.nome_viajante}</strong></span>
     <span><label>Destino</label>${req.destino_cidade} / ${req.destino_estado}</span>
     <span><label>Ida</label>${formatData(req.data_ida)}</span>
     <span><label>Volta</label>${formatData(req.data_volta)}</span>
-    <span><label>Serviços</label>${Array.isArray(req.tipo_servico) ? req.tipo_servico.join(', ') : req.tipo_servico}</span>
-    <span><label>🏨 Quarto</label><strong>${req.quarto_tipo_solicitado}</strong></span>
-    <span><label>🚗 Veículo</label><strong>${req.veiculo_tipo_solicitado}</strong></span>`;
+    <span><label>Serviços</label>${req.tipo_servico.join(', ')}</span>
+    <span><label>Quarto</label><strong>${req.quarto_tipo_solicitado}</strong></span>
+    <span><label>Veículo</label><strong>${req.veiculo_tipo_solicitado}</strong></span>`;
 
   if (req.status === 'Aprovada / Aguardando Voucher') {
     document.getElementById('secaoVoucher').classList.remove('hidden');
@@ -295,6 +330,41 @@ function renderizarSolicitacao(req) {
   }
 
   document.getElementById('tipoQuartoDisplay').textContent = req.quarto_tipo_solicitado;
+
+  // Preferência do viajante (Amadeus)
+  const temVoo   = req.preferencia_voo_cia   && req.preferencia_voo_cia   !== '';
+  const temHotel = req.preferencia_hotel_nome && req.preferencia_hotel_nome !== '';
+  if (temVoo || temHotel) {
+    document.getElementById('blocoPreferencia').classList.remove('hidden');
+    if (temVoo) {
+      document.getElementById('preferenciaVoo').classList.remove('hidden');
+      const paradas = req.preferencia_voo_paradas == 0 ? 'Direto' : req.preferencia_voo_paradas + ' parada(s)';
+      const bagagem = req.preferencia_voo_bagagem == 1 || req.preferencia_voo_bagagem === 'true' ? 'Inclusa' : 'Não inclusa';
+      document.getElementById('preferenciaVooDados').innerHTML = `
+        <span><label>Voo</label><strong>${req.preferencia_voo_cia} ${req.preferencia_voo_numero}</strong></span>
+        <span><label>Saída</label>${formatDT(req.preferencia_voo_saida)}</span>
+        <span><label>Chegada</label>${formatDT(req.preferencia_voo_chegada)}</span>
+        <span><label>Paradas</label>${paradas}</span>
+        <span><label>Bagagem</label>${bagagem}</span>
+        <span><label>Valor ref.</label><strong>R$ ${parseFloat(req.preferencia_voo_valor || 0).toFixed(2)}</strong></span>`;
+    }
+    if (temHotel) {
+      document.getElementById('preferenciaHotel').classList.remove('hidden');
+      document.getElementById('preferenciaHotelDados').innerHTML = `
+        <span><label>Hotel</label><strong>${req.preferencia_hotel_nome}</strong></span>
+        <span><label>Categoria</label>${req.preferencia_hotel_estrelas || '—'} ★</span>
+        <span><label>Diária ref.</label><strong>R$ ${parseFloat(req.preferencia_hotel_diaria || 0).toFixed(2)}</strong></span>
+        <span><label>Total ref.</label><strong>R$ ${parseFloat(req.preferencia_hotel_total || 0).toFixed(2)}</strong></span>`;
+    }
+  }
+}
+
+function formatDT(dt) {
+  if (!dt) return '—';
+  try {
+    const d = new Date(dt);
+    return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  } catch (e) { return dt; }
 }
 
 function exibirSecoesServico(req) {
@@ -318,6 +388,25 @@ function calcularDiarias() {
 
 function toggleConexao(tem) {
   document.getElementById('aeroEscala').classList.toggle('hidden', !tem);
+}
+
+// ── PDF da cotação ───────────────────────────────────────────
+let cotacaoPdfBase64 = null;
+
+function carregarPdfCotacao(input) {
+  const file   = input.files[0];
+  const status = document.getElementById('pdfCotacaoStatus');
+  cotacaoPdfBase64 = null;
+  if (!file) return;
+  if (file.type !== 'application/pdf') { status.textContent = 'Apenas arquivos PDF.'; status.style.color = '#c62828'; input.value = ''; return; }
+  if (file.size > 5 * 1024 * 1024) { status.textContent = 'Arquivo maior que 5 MB.'; status.style.color = '#c62828'; input.value = ''; return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    cotacaoPdfBase64 = e.target.result.split(',')[1];
+    status.textContent = file.name + ' (' + (file.size / 1024).toFixed(0) + ' KB)';
+    status.style.color = '#2e7d32';
+  };
+  reader.readAsDataURL(file);
 }
 
 // ── Envio de cotação ──────────────────────────────────────────
@@ -362,7 +451,8 @@ function enviarCotacao() {
       seguro:     document.querySelector('[name="carroSeguro"]:checked')?.value === 'true',
       valor:      parseFloat(document.getElementById('carroValor')?.value),
     },
-    obs: document.getElementById('cotacaoObs')?.value,
+    obs:     document.getElementById('cotacaoObs')?.value,
+    cotacaoPdfBase64: cotacaoPdfBase64 || null,
   };
 
   // Envia apenas seções cujos campos estão visíveis (serviço solicitado)

@@ -30,28 +30,40 @@ function getConfig() {
 // ── doGet — Roteador de requisições GET ──────────────────────
 function doGet(e) {
   const params = e.parameter || {};
+  try {
+    // Portal da Agência — DEVE vir ANTES de params.token
+    // O link da agência contém reqID+tipo=agencia (sem token de aprovação)
+    if (params.reqID && params.tipo === 'agencia') {
+      return renderPortalAgencia(params.reqID, params.ag);
+    }
 
-  // Aprovação via link de e-mail (token)
-  if (params.token) {
-    return processarTokenAprovacao(params.token);
+    // Aprovação via link de e-mail (token único N1/N2)
+    if (params.token) {
+      return processarTokenAprovacao(params.token);
+    }
+
+    // Página de confirmação de ação
+    if (params.acao) {
+      return renderPaginaConfirmacao(params.acao);
+    }
+
+    // Portal principal do Viajante (default)
+    return HtmlService
+      .createTemplateFromFile('Index')
+      .evaluate()
+      .setTitle('Portal de Viagens — Magalu')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  } catch (err) {
+    Logger.log('[ERRO doGet] params=' + JSON.stringify(params) + ' | ' + err.message + ' | ' + err.stack);
+    return HtmlService.createHtmlOutput(
+      '<html><head><meta charset="UTF-8"></head>'
+      + '<body style="font-family:sans-serif;padding:40px;color:#333">'
+      + '<h2 style="color:#c62828">Erro ao carregar o portal</h2>'
+      + '<p>' + err.message + '</p>'
+      + '<p style="color:#999;font-size:12px">Se o problema persistir, contate o setor de viagens.</p>'
+      + '</body></html>'
+    ).setTitle('Erro — Viagens Magalu');
   }
-
-  // Portal da Agência (cotação ou voucher)
-  if (params.reqID && params.tipo === 'agencia') {
-    return renderPortalAgencia(params.reqID, params.ag);
-  }
-
-  // Página de confirmação de ação
-  if (params.acao) {
-    return renderPaginaConfirmacao(params.acao);
-  }
-
-  // Portal principal do Viajante (default)
-  return HtmlService
-    .createTemplateFromFile('Index')
-    .evaluate()
-    .setTitle('Portal de Viagens — Magalu')
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
 // ── doPost — Roteador de requisições POST ────────────────────
@@ -98,6 +110,10 @@ function doPost_proxy(payload) {
     uploadVoucher:               () => uploadVoucher(payload),
     aprovarExcecaoRH:            () => aprovarExcecaoRH(payload),
     carregarSolicitacaoAgencia:  () => carregarSolicitacaoAgencia(payload.reqID, payload.agencia),
+    // Amadeus Self-Service (busca consultiva de preferências)
+    buscarLocaisAmadeus:   () => buscarLocaisAmadeus(payload.termo),
+    buscarVoosAmadeus:     () => buscarVoosAmadeus(payload.origem, payload.destino, payload.dataIda, payload.dataVolta || null, payload.adultos),
+    buscarHoteisAmadeus:   () => buscarHoteisAmadeus(payload.cityCode, payload.checkin, payload.checkout, payload.adultos),
   };
 
   try {
@@ -105,10 +121,13 @@ function doPost_proxy(payload) {
     inicializarPlanilha();
     if (!rotas[acao]) throw new Error(`Ação desconhecida: ${acao}`);
     const resultado = rotas[acao]();
-    return { sucesso: true, dados: resultado };
+    // Sanitiza a resposta via JSON cycle: remove Date, undefined e tipos não-primitivos
+    // que causam erro de serialização no google.script.run ("Uncaught Bs")
+    const dadosLimpos = JSON.parse(JSON.stringify(resultado === undefined ? null : resultado));
+    return { sucesso: true, dados: dadosLimpos };
   } catch (err) {
     Logger.log(`[ERRO doPost_proxy] acao=${acao} | ${err.message} | ${err.stack}`);
-    return { sucesso: false, erro: err.message };
+    return { sucesso: false, erro: err.message || 'Erro desconhecido' };
   }
 }
 
@@ -182,7 +201,11 @@ function inicializarPlanilha() {
       'req_id', 'matricula_viajante', 'nome_viajante', 'matricula_operador', 'nome_operador',
       'via_delegacao', 'status', 'criado_em', 'atualizado_em', 'tipo_servico',
       'destino_cidade', 'destino_estado', 'data_ida', 'data_volta', 'antecedencia_dias',
-      'classificacao_aereo', 'motivo_viagem', 'quarto_tipo_solicitado', 'veiculo_tipo_solicitado',
+      'classificacao_aereo', 'motivo_viagem', 'quarto_tipo_solicitado', 'veiculo_tipo_solicitado', 'email',
+      // Preferência do viajante via Amadeus (opcional — busca consultiva)
+      'preferencia_voo_cia', 'preferencia_voo_numero', 'preferencia_voo_saida', 'preferencia_voo_chegada',
+      'preferencia_voo_paradas', 'preferencia_voo_bagagem', 'preferencia_voo_valor',
+      'preferencia_hotel_nome', 'preferencia_hotel_estrelas', 'preferencia_hotel_diaria', 'preferencia_hotel_total',
       // Exceção saúde (9)
       'quarto_excecao_saude', 'excecao_motivo', 'excecao_cid', 'excecao_laudo_link',
       'excecao_laudo_nome', 'excecao_validade', 'excecao_obs', 'excecao_status_rh', 'excecao_rh_em',
@@ -243,4 +266,414 @@ function inicializarPlanilha() {
       Logger.log(`[INIT] Aba '${nome}' criada com ${header.length} colunas.`);
     }
   });
+
+  // Migração: garante que a coluna 'email' exista na aba Solicitacoes
+  const abaSOL = ss.getSheetByName('Solicitacoes');
+  if (abaSOL) {
+    const hdrAtual = abaSOL.getRange(1, 1, 1, abaSOL.getLastColumn()).getValues()[0];
+    if (!hdrAtual.includes('email')) {
+      const idxVeic = hdrAtual.indexOf('veiculo_tipo_solicitado');
+      if (idxVeic >= 0) {
+        abaSOL.insertColumnAfter(idxVeic + 1); // 1-indexed
+        abaSOL.getRange(1, idxVeic + 2).setValue('email');
+        Logger.log('[INIT] Coluna email adicionada em Solicitacoes após veiculo_tipo_solicitado');
+      }
+    }
+  }
 }
+
+// ════════════════════════════════════════════════════════════
+// ⚠ FUNÇÃO DE TESTE — Remover após validação do fluxo
+// ════════════════════════════════════════════════════════════
+/**
+ * DIAGNÓSTICO — Testa isoladamente o envio do e-mail de cotações para o setor.
+ * Pega a primeira solicitação em status 'Pendente Aprovação Setor' (ou 'Cotação Parcial')
+ * e força o envio do e-mail para leandro.araujo@luizalabs.com.
+ *
+ * Use quando: o status virou "Pendente Aprovação Setor" mas o e-mail não chegou.
+ * Execução: editor GAS → selecionar TESTE_diagnosticoEmailSetor → Executar
+ */
+function TESTE_diagnosticoEmailSetor() {
+  const MEU_EMAIL = 'leandro.araujo@luizalabs.com';
+  const cfg = getConfig();
+  const ss  = SpreadsheetApp.openById(cfg.SHEET_ID);
+  const sheet = ss.getSheetByName('Solicitacoes');
+  const dados = sheet.getDataRange().getValues();
+  const header = dados[0];
+  const idxReq    = header.indexOf('req_id');
+  const idxStatus = header.indexOf('status');
+
+  Logger.log('[DIAG] Colunas com "enviado_em": ' + header.filter(h => String(h).includes('enviado_em')).join(', '));
+  Logger.log('[DIAG] EMAIL_VIAGENS = ' + cfg.EMAIL_VIAGENS);
+
+  // Busca última solicitação com cotações presentes
+  let reqAlvo = null;
+  for (let i = dados.length - 1; i >= 1; i--) {
+    const status = String(dados[i][idxStatus] || '');
+    if (status === 'Pendente Aprovação Setor' || status === 'Cotação Parcial') {
+      reqAlvo = linhaParaObjeto(header, dados[i]);
+      Logger.log('[DIAG] Solicitação encontrada: reqID=' + reqAlvo.req_id + ' | status=' + status);
+      break;
+    }
+  }
+
+  if (!reqAlvo) {
+    Logger.log('[DIAG] Nenhuma solicitação em status adequado encontrada. Encerrando.');
+    GmailApp.sendEmail(MEU_EMAIL, '[DIAG] Nenhuma req encontrada', 'Não há solicitações com status Cotação Parcial ou Pendente Aprovação Setor.');
+    return;
+  }
+
+  Logger.log('[DIAG] cotacao_tastur_enviado_em = ' + reqAlvo.cotacao_tastur_enviado_em);
+  Logger.log('[DIAG] cotacao_kontrip_enviado_em = ' + reqAlvo.cotacao_kontrip_enviado_em);
+  Logger.log('[DIAG] cotacao_tastur_aero_cia = ' + reqAlvo.cotacao_tastur_aero_cia);
+  Logger.log('[DIAG] cotacao_kontrip_aero_cia = ' + reqAlvo.cotacao_kontrip_aero_cia);
+
+  // Força envio para MEU_EMAIL
+  const p = PropertiesService.getScriptProperties();
+  const origViagens = p.getProperty('EMAIL_VIAGENS') || '';
+  try {
+    p.setProperty('EMAIL_VIAGENS', MEU_EMAIL);
+    Logger.log('[DIAG] Chamando enviarEmailAprovacaoSetor...');
+    enviarEmailAprovacaoSetor(reqAlvo.req_id, reqAlvo);
+    Logger.log('[DIAG] ✅ enviarEmailAprovacaoSetor executou sem erro.');
+  } catch (err) {
+    Logger.log('[DIAG] ❌ ERRO em enviarEmailAprovacaoSetor: ' + err.message + '\n' + err.stack);
+    GmailApp.sendEmail(MEU_EMAIL, '[DIAG ERRO] enviarEmailAprovacaoSetor falhou',
+      'reqID: ' + reqAlvo.req_id + '\nErro: ' + err.message + '\n\nStack:\n' + err.stack);
+  } finally {
+    p.setProperty('EMAIL_VIAGENS', origViagens);
+  }
+}
+
+/**
+ * Simula a cotação da agência FALTANTE em uma solicitação existente com status 'Cotação Parcial'.
+ * Útil para testar sem precisar abrir dois portais manualmente.
+ *
+ * Altera a variável REQ_ID_ALVO abaixo para o protocolo desejado,
+ * ou deixe '' para pegar automaticamente a última req em 'Cotação Parcial'.
+ *
+ * Execução: editor GAS → selecionar TESTE_simularSegundaCotacao → Executar
+ */
+function TESTE_simularSegundaCotacao() {
+  const REQ_ID_ALVO = ''; // deixe '' para auto-detectar, ou coloque ex: 'REQ-2026-2332'
+  const MEU_EMAIL   = 'leandro.araujo@luizalabs.com';
+  const p = PropertiesService.getScriptProperties();
+  const origViagens = p.getProperty('EMAIL_VIAGENS') || '';
+
+  inicializarPlanilha();
+  const cfg   = getConfig();
+  const ss    = SpreadsheetApp.openById(cfg.SHEET_ID);
+  const sheet = ss.getSheetByName('Solicitacoes');
+  const dados = sheet.getDataRange().getValues();
+  const hdr   = dados[0];
+  const idxReq    = hdr.indexOf('req_id');
+  const idxStatus = hdr.indexOf('status');
+
+  // Encontra a linha alvo
+  let linhaIdx = -1;
+  let req      = null;
+  for (let i = dados.length - 1; i >= 1; i--) {
+    const status  = String(dados[i][idxStatus] || '');
+    const reqID   = String(dados[i][idxReq] || '');
+    const ehAlvo  = REQ_ID_ALVO ? reqID === REQ_ID_ALVO : status === 'Cotação Parcial';
+    if (ehAlvo) { linhaIdx = i; req = linhaParaObjeto(hdr, dados[i]); break; }
+  }
+
+  if (!req) {
+    Logger.log('[TESTE] Nenhuma solicitação encontrada com status Cotação Parcial' + (REQ_ID_ALVO ? ' para reqID=' + REQ_ID_ALVO : '') + '.');
+    return;
+  }
+
+  Logger.log('[TESTE] Req alvo: ' + req.req_id + ' | status: ' + req.status);
+
+  // Descobre qual agência falta
+  const tasturEnviou  = req.cotacao_tastur_enviado_em  !== '' && req.cotacao_tastur_enviado_em  != null;
+  const kontripEnviou = req.cotacao_kontrip_enviado_em !== '' && req.cotacao_kontrip_enviado_em != null;
+  Logger.log('[TESTE] Tastur enviou: ' + tasturEnviou + ' | Kontrip enviou: ' + kontripEnviou);
+
+  if (tasturEnviou && kontripEnviou) {
+    Logger.log('[TESTE] Ambas as agências já enviaram cotação. Forçando e-mail do setor...');
+    p.setProperty('EMAIL_VIAGENS', MEU_EMAIL);
+    try { enviarEmailAprovacaoSetor(req.req_id, req); } finally { p.setProperty('EMAIL_VIAGENS', origViagens); }
+    return;
+  }
+
+  // Monta cotação simulada para a agência faltante
+  const agencia   = tasturEnviou ? 'kontrip' : 'tastur';
+  const prefixo   = 'cotacao_' + agencia;
+  const dataIda   = req.data_ida ? Utilities.formatDate(new Date(req.data_ida), 'America/Sao_Paulo', 'dd/MM/yyyy') : '29/04/2026';
+  const dataVolta = req.data_volta ? Utilities.formatDate(new Date(req.data_volta), 'America/Sao_Paulo', 'dd/MM/yyyy') : '04/05/2026';
+  const agora     = new Date();
+  const validade  = Utilities.formatDate(new Date(agora.getTime() + 48 * 3600000), 'America/Sao_Paulo', 'dd/MM/yyyy');
+
+  const cotacaoSimulada = {};
+  cotacaoSimulada[prefixo + '_aero_cia']       = agencia === 'tastur' ? 'LATAM' : 'GOL';
+  cotacaoSimulada[prefixo + '_aero_voo']       = agencia === 'tastur' ? 'LA3042' : 'G35501';
+  cotacaoSimulada[prefixo + '_aero_saida']     = dataIda + ' 07:30';
+  cotacaoSimulada[prefixo + '_aero_chegada']   = dataIda + ' 08:50';
+  cotacaoSimulada[prefixo + '_aero_origem']    = 'VCP';
+  cotacaoSimulada[prefixo + '_aero_destino']   = 'CGH';
+  cotacaoSimulada[prefixo + '_aero_classe']    = 'Econômica';
+  cotacaoSimulada[prefixo + '_aero_bagagem']   = agencia === 'tastur';
+  cotacaoSimulada[prefixo + '_aero_valor']     = agencia === 'tastur' ? 490.00 : 405.00;
+  cotacaoSimulada[prefixo + '_aero_validade']  = validade;
+  cotacaoSimulada[prefixo + '_hotel_nome']     = agencia === 'tastur' ? 'Ibis SP Centro' : 'Comfort Paulista';
+  cotacaoSimulada[prefixo + '_hotel_checkin']  = dataIda;
+  cotacaoSimulada[prefixo + '_hotel_checkout'] = dataVolta;
+  cotacaoSimulada[prefixo + '_hotel_diaria']   = agencia === 'tastur' ? 320 : 295;
+  cotacaoSimulada[prefixo + '_hotel_total']    = agencia === 'tastur' ? 1600 : 1475;
+  cotacaoSimulada[prefixo + '_hotel_categoria']= '3 estrelas';
+  cotacaoSimulada[prefixo + '_enviado_em']     = agora;
+
+  // Grava na planilha
+  Object.entries(cotacaoSimulada).forEach(([col, val]) => {
+    const idx = hdr.indexOf(col);
+    if (idx >= 0) sheet.getRange(linhaIdx + 1, idx + 1).setValue(val);
+  });
+  Logger.log('[TESTE] Cotação simulada de ' + agencia.toUpperCase() + ' gravada na planilha.');
+
+  // Atualiza status e dispara e-mail do setor
+  sheet.getRange(linhaIdx + 1, idxStatus + 1).setValue('Pendente Aprovação Setor');
+  sheet.getRange(linhaIdx + 1, hdr.indexOf('atualizado_em') + 1).setValue(agora);
+
+  const reqAtualizado = linhaParaObjeto(hdr, sheet.getRange(linhaIdx + 1, 1, 1, hdr.length).getValues()[0]);
+  p.setProperty('EMAIL_VIAGENS', MEU_EMAIL);
+  try {
+    enviarEmailAprovacaoSetor(req.req_id, reqAtualizado);
+    Logger.log('[TESTE] ✅ E-mail do setor enviado para ' + MEU_EMAIL + ' | req: ' + req.req_id);
+  } catch (err) {
+    Logger.log('[TESTE] ❌ ERRO ao enviar e-mail do setor: ' + err.message + '\n' + err.stack);
+  } finally {
+    p.setProperty('EMAIL_VIAGENS', origViagens);
+  }
+}
+
+/**
+ * Executa o FLUXO COMPLETO automaticamente, redirecionando
+ * TODOS os e-mails para leandro.araujo@luizalabs.com.
+ *
+ * O que acontece em ordem:
+ *   1. Cria solicitação de teste na planilha
+ *   2. Envia e-mail de LIDERANÇA (você recebe)
+ *   3. Envia e-mails para AGÊNCIAS solicitando cotação (você recebe 2 e-mails)
+ *   4. Registra cotações simuladas de Tastur e Kontrip
+ *   5. Envia e-mail do SETOR DE VIAGENS com tabela comparativa (você recebe)
+ *   6. Simula aprovação da Tastur e envia e-mail à agência vencedora (você recebe)
+ *   7. Envia e-mail de confirmação ao viajante (você recebe)
+ *   8. Envia e-mail de resumo com link do portal para upload de voucher
+ *
+ * Como usar:
+ *   1. Acesse https://script.google.com/home → abra o projeto
+ *   2. Selecione "TESTE_fluxoCompleto" no dropdown de funções
+ *   3. Clique em "Executar"
+ *   4. Aguarde ~30s e verifique os e-mails em leandro.araujo@luizalabs.com
+ */
+function TESTE_fluxoCompleto() {
+  const MEU_EMAIL = 'leandro.araujo@luizalabs.com';
+  const p = PropertiesService.getScriptProperties();
+
+  // Salva valores originais para restaurar depois
+  const orig = {
+    EMAIL_TASTUR:  p.getProperty('EMAIL_TASTUR')  || '',
+    EMAIL_KONTRIP: p.getProperty('EMAIL_KONTRIP') || '',
+    EMAIL_VIAGENS: p.getProperty('EMAIL_VIAGENS') || '',
+  };
+
+  try {
+    // Redireciona TODOS os destinatários para MEU_EMAIL durante o teste
+    p.setProperties({ EMAIL_TASTUR: MEU_EMAIL, EMAIL_KONTRIP: MEU_EMAIL, EMAIL_VIAGENS: MEU_EMAIL });
+    Logger.log('[TESTE] ▶ Iniciando fluxo completo. Todos os e-mails direcionados para: ' + MEU_EMAIL);
+    TESTE_executarFluxo_(MEU_EMAIL);
+  } catch (err) {
+    Logger.log('[TESTE ERRO] ' + err.message + '\n' + err.stack);
+    try {
+      GmailApp.sendEmail(MEU_EMAIL,
+        '❌ [TESTE ERRO] TESTE_fluxoCompleto falhou',
+        'Erro: ' + err.message + '\n\nStack:\n' + err.stack,
+        { name: 'Sistema de Viagens Magalu' });
+    } catch (_) {}
+    throw err;
+  } finally {
+    // SEMPRE restaura os e-mails originais, mesmo em caso de erro
+    p.setProperties(orig);
+    Logger.log('[TESTE] ◀ Properties restauradas. Emails originais: TASTUR=' + orig.EMAIL_TASTUR + ' | KONTRIP=' + orig.EMAIL_KONTRIP + ' | VIAGENS=' + orig.EMAIL_VIAGENS);
+  }
+}
+
+function TESTE_executarFluxo_(MEU_EMAIL) {
+  inicializarPlanilha();
+  const cfg = getConfig(); // EMAIL_TASTUR/KONTRIP/VIAGENS = MEU_EMAIL agora
+
+  const agora     = new Date();
+  const dataIda   = new Date(); dataIda.setDate(agora.getDate() + 20);
+  const dataVolta = new Date(); dataVolta.setDate(agora.getDate() + 25);
+  const fmtISO    = d => Utilities.formatDate(d, 'America/Sao_Paulo', 'yyyy-MM-dd');
+  const fmtBR     = d => Utilities.formatDate(d, 'America/Sao_Paulo', 'dd/MM/yyyy');
+  const reqID     = 'TESTE-' + Utilities.formatDate(agora, 'America/Sao_Paulo', 'yyyyMMdd-HHmm');
+  Logger.log('[TESTE] reqID = ' + reqID);
+
+  // ── PASSO 1: Cria linha de teste na planilha ────────────────
+  const ss    = SpreadsheetApp.openById(cfg.SHEET_ID);
+  const sheet = ss.getSheetByName('Solicitacoes');
+  if (!sheet) throw new Error('[TESTE] Aba Solicitacoes não encontrada. Verifique SHEET_ID.');
+  const hdr = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  if (hdr.length === 0) throw new Error('[TESTE] Header da aba Solicitacoes está vazio.');
+
+  const dadosTeste = {
+    req_id:                  reqID,
+    matricula_viajante:      '156834',
+    nome_viajante:           'LEANDRO AUGUSTO DE MELO ARAUJO',
+    matricula_operador:      '156834',
+    nome_operador:           'LEANDRO AUGUSTO DE MELO ARAUJO',
+    via_delegacao:           false,
+    status:                  'Aguardando Cotação',
+    criado_em:               agora,
+    atualizado_em:           agora,
+    tipo_servico:            'Aereo,Hospedagem',
+    destino_cidade:          'São Paulo',
+    destino_estado:          'SP',
+    data_ida:                fmtISO(dataIda),
+    data_volta:              fmtISO(dataVolta),
+    antecedencia_dias:       20,
+    classificacao_aereo:     'Comum',
+    motivo_viagem:           '[TESTE] Validação do fluxo completo',
+    quarto_tipo_solicitado:  'Compartilhado',
+    veiculo_tipo_solicitado: 'Econômico',
+    email:                   MEU_EMAIL,
+    aprovador_n1_email:      MEU_EMAIL,
+    aprovador_n1_nome:       'Gestor Teste (Você)',
+    aprovador_n1_nivel:      '1',
+  };
+  sheet.appendRow(hdr.map(col => (dadosTeste[col] !== undefined ? dadosTeste[col] : '')));
+  Logger.log('[TESTE][1/7] ✅ Solicitação criada: ' + reqID);
+
+  // viajante e cadeia usados nas funções de email
+  const viajante = {
+    nome:                    dadosTeste.nome_viajante,
+    email:                   MEU_EMAIL,
+    categoria_hospedagem:    'Compartilhado',
+    categoria_veiculo:       'Econômico',
+    motivo_categoria_hosp:   'Cargo padrão',
+  };
+  const cadeia = { n1_email: MEU_EMAIL, n1_nome: 'Gestor Teste (Você)', n1_nivel: '1' };
+
+  // ── PASSO 2: E-mail de LIDERANÇA → MEU_EMAIL ───────────────
+  enviarEmailAprovacaoLideranca(reqID, viajante, dadosTeste, 'Comum', cadeia);
+  Logger.log('[TESTE][2/7] ✅ E-mail LIDERANÇA → ' + MEU_EMAIL);
+
+  // ── PASSO 3: E-mails para AGÊNCIAS → MEU_EMAIL (2 e-mails) ─
+  // (simula a liderança clicando em "Aprovar Viagem")
+  dispararEmailAgencias(reqID, viajante, dadosTeste, 'Comum');
+  Logger.log('[TESTE][3/7] ✅ E-mails AGÊNCIAS (Tastur + Kontrip) → ' + MEU_EMAIL);
+
+  // ── PASSO 4: Cotações simuladas de ambas as agências ────────
+  // Tastur cotou primeiro
+  submeterCotacaoAgencia({
+    reqID: reqID,
+    agencia: 'tastur',
+    aereo: {
+      cia: 'LATAM', voo: 'LA3042',
+      saida:   fmtBR(dataIda) + ' 07:00',
+      chegada: fmtBR(dataIda) + ' 08:20',
+      origem: 'VCP', destino: 'CGH',
+      classe: 'Econômica', bagagem: true,
+      valor: 485.90,
+      validade: fmtBR(new Date(agora.getTime() + 48 * 3600000)),
+    },
+    hospedagem: {
+      nome: 'Ibis SP Centro',
+      checkin:  fmtBR(dataIda),
+      checkout: fmtBR(dataVolta),
+      diaria: 320, total: 1600, categoria: '3 estrelas',
+    },
+  });
+  Logger.log('[TESTE][4a/7] ✅ Cotação Tastur registrada (status: Cotação Parcial).');
+
+  // Kontrip cotou em seguida → dispara automaticamente enviarEmailAprovacaoSetor → MEU_EMAIL
+  submeterCotacaoAgencia({
+    reqID: reqID,
+    agencia: 'kontrip',
+    aereo: {
+      cia: 'GOL', voo: 'G35501',
+      saida:   fmtBR(dataIda) + ' 06:30',
+      chegada: fmtBR(dataIda) + ' 07:55',
+      origem: 'VCP', destino: 'CGH',
+      classe: 'Econômica', bagagem: false,
+      valor: 398.50,
+      validade: fmtBR(new Date(agora.getTime() + 48 * 3600000)),
+    },
+    hospedagem: {
+      nome: 'Comfort Paulista',
+      checkin:  fmtBR(dataIda),
+      checkout: fmtBR(dataVolta),
+      diaria: 295, total: 1475, categoria: '3 estrelas',
+    },
+  });
+  Logger.log('[TESTE][4b/7] ✅ Cotação Kontrip registrada. E-mail SETOR → ' + MEU_EMAIL + ' (status: Pendente Aprovação Setor).');
+
+  // ── PASSO 5: Simula aprovação do setor (escolhe Tastur) ─────
+  // (simula o setor clicando em "Aprovar Tastur")
+  atualizarStatusSolicitacao(reqID, 'Aprovada / Aguardando Voucher');
+  registrarAgenciaEscolhida(reqID, 'Tastur');
+  const req = getRequisicao(reqID);
+
+  notificarAgenciaVencedora(req, 'Tastur');     // EMAIL_TASTUR = MEU_EMAIL → você recebe
+  notificarAgenciaPerdedora(req, 'Tastur');     // EMAIL_KONTRIP = MEU_EMAIL → você recebe
+  notificarViajanteSolicitacaoAprovada(req, 'Tastur'); // req.email = MEU_EMAIL → você recebe
+  Logger.log('[TESTE][5/7] ✅ E-mails aprovação final (agência vencedora, perdedora, viajante) → ' + MEU_EMAIL);
+
+  // ── PASSO 6: Log de aprovação (para consistência da sheet) ──
+  registrarLogAprovacao({
+    reqID,
+    matriculaViajante:  '156834',
+    matriculaOperador:  '156834',
+    etapa:              'Setor',
+    aprovadorEmail:     MEU_EMAIL,
+    acao:               'Aprovado',
+    agenciaEscolhida:   'Tastur',
+    tokenUtilizado:     'TESTE-SIMULADO',
+  });
+  Logger.log('[TESTE][6/7] ✅ Log de aprovação registrado.');
+
+  // ── PASSO 7: Resumo com link do portal para testar o voucher ─
+  const linkPortal = cfg.WEBAPP_URL + '?reqID=' + reqID + '&tipo=agencia&ag=tastur';
+  const geradoEm   = Utilities.formatDate(agora, 'America/Sao_Paulo', 'dd/MM/yyyy HH:mm:ss');
+
+  GmailApp.sendEmail(MEU_EMAIL,
+    '✅ [TESTE CONCLUÍDO] ' + reqID + ' — Verifique os 7 e-mails',
+    '', {
+      name: 'Sistema de Viagens Magalu',
+      htmlBody: '<div style="font-family:sans-serif;max-width:620px">'
+        + '<div style="background:#2e7d32;padding:18px;border-radius:8px 8px 0 0">'
+        +   '<h2 style="color:#fff;margin:0">&#x2705; Fluxo completo executado!</h2>'
+        +   '<p style="color:#c8e6c9;margin:4px 0 0">Protocolo: <strong>' + reqID + '</strong></p>'
+        + '</div>'
+        + '<div style="background:#fff;padding:22px;border:1px solid #e0e0e0;border-top:none">'
+        +   '<p>Todos os e-mails foram enviados para <strong>' + MEU_EMAIL + '</strong>. Verifique sua caixa de entrada — você deve ter recebido:</p>'
+        +   '<ol style="line-height:2">'
+        +     '<li>&#x1F4E7; <strong>E-mail de LIDERAN&Ccedil;A</strong> — Aprovar/Reprovar viagem</li>'
+        +     '<li>&#x1F4E7; <strong>E-mail para AG&Ecirc;NCIA TASTUR</strong> — Solicita&ccedil;&atilde;o de cota&ccedil;&atilde;o com link do portal</li>'
+        +     '<li>&#x1F4E7; <strong>E-mail para AG&Ecirc;NCIA KONTRIP</strong> — Solicita&ccedil;&atilde;o de cota&ccedil;&atilde;o com link do portal</li>'
+        +     '<li>&#x1F4E7; <strong>E-mail do SETOR DE VIAGENS</strong> — Tabela comparativa Tastur vs Kontrip + links de aprova&ccedil;&atilde;o</li>'
+        +     '<li>&#x1F4E7; <strong>E-mail TASTUR VENCEDORA</strong> — Cota&ccedil;&atilde;o aprovada + link portal para upload de voucher</li>'
+        +     '<li>&#x1F4E7; <strong>E-mail KONTRIP (perdedora)</strong> — Cota&ccedil;&atilde;o n&atilde;o selecionada</li>'
+        +     '<li>&#x1F4E7; <strong>E-mail VIAJANTE</strong> — Confirma&ccedil;&atilde;o que a viagem foi aprovada</li>'
+        +   '</ol>'
+        +   '<hr style="border:none;border-top:1px solid #eee;margin:16px 0">'
+        +   '<p><strong>Pr&oacute;xima etapa — Portal do Voucher</strong></p>'
+        +   '<p>Para testar o upload do voucher (etapa final do fluxo), acesse o portal da ag&ecirc;ncia:</p>'
+        +   '<a href="' + linkPortal + '" style="background:#0086FF;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;display:inline-block;margin:8px 0">'
+        +     '&#x1F517; Acessar Portal Ag&ecirc;ncia (Tastur) — Upload Voucher'
+        +   '</a>'
+        +   '<p style="color:#999;font-size:12px;margin-top:16px">'
+        +     'Gerado em: ' + geradoEm + '<br>'
+        +     'Para repetir o teste, execute <code>TESTE_fluxoCompleto()</code> novamente no editor GAS.<br>'
+        +     'As propriedades EMAIL_TASTUR / EMAIL_KONTRIP / EMAIL_VIAGENS foram restauradas para os valores originais.'
+        +   '</p>'
+        + '</div></div>',
+    });
+
+  Logger.log('[TESTE][7/7] ✅ E-mail de resumo enviado.');
+  Logger.log('[TESTE] ✅ CONCLUÍDO — 8 e-mails enviados para ' + MEU_EMAIL + '. Verifique a caixa de entrada.');
+}
+

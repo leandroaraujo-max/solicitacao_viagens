@@ -120,6 +120,22 @@ function verificarConclusaoVouchers(reqID, req) {
     atualizarCampoSolicitacao(reqID, 'concluido_em', new Date());
     notificarViajanteSolicitacaoAprovada(reqAtualizado, reqAtualizado.agencia_vencedora);
     enviarVouchersAoViajante(reqAtualizado);
+    // Notifica também o setor de viagens com cópia dos vouchers
+    const cfg = getConfig();
+    if (cfg.EMAIL_VIAGENS) {
+      const links = [
+        reqAtualizado.voucher_aereo_link  ? `<li><a href="${reqAtualizado.voucher_aereo_link}">Voucher Aéreo</a></li>` : '',
+        reqAtualizado.voucher_hotel_link  ? `<li><a href="${reqAtualizado.voucher_hotel_link}">Voucher Hospedagem</a></li>` : '',
+        reqAtualizado.voucher_carro_link  ? `<li><a href="${reqAtualizado.voucher_carro_link}">Voucher Carro</a></li>` : '',
+      ].join('');
+      GmailApp.sendEmail(cfg.EMAIL_VIAGENS,
+        `[CONCLUÍDA] Vouchers enviados — ${reqID} — ${reqAtualizado.nome_viajante}`, '',
+        { htmlBody: `<p>A solicitação <strong>${reqID}</strong> foi concluída.<br>
+           Viajante: <strong>${reqAtualizado.nome_viajante}</strong> → ${reqAtualizado.destino_cidade}<br>
+           Agência: <strong>${reqAtualizado.agencia_vencedora || '—'}</strong></p>
+           <ul>${links}</ul>`,
+          name: 'Sistema de Viagens Magalu' });
+    }
   }
 }
 

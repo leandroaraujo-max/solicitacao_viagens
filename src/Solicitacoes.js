@@ -39,10 +39,10 @@ function submeterSolicitacao(payload) {
     payload.matricula_operador || payload.matricula_viajante,
     payload.nome_operador      || viajante.nome,
     payload.via_delegacao      || false,
-    'Aguardando Cotação',         // status inicial
+    'Pendente Aprovação Liderança', // status inicial — aguarda aprovação hierarquica
     agora2,                       // criado_em
     agora2,                       // atualizado_em
-    payload.tipo_servico,
+    Array.isArray(payload.tipo_servico) ? payload.tipo_servico.join(',') : payload.tipo_servico,
     payload.destino_cidade,
     payload.destino_estado || '',
     payload.data_ida,
@@ -52,6 +52,19 @@ function submeterSolicitacao(payload) {
     payload.motivo_viagem || '',
     viajante.categoria_hospedagem,   // quarto_tipo_solicitado
     viajante.categoria_veiculo,      // veiculo_tipo_solicitado
+    viajante.email || '',            // email do viajante (usado em notificações)
+    // Preferência do viajante via Amadeus (opcional)
+    payload.preferencia_voo_cia      || '',
+    payload.preferencia_voo_numero   || '',
+    payload.preferencia_voo_saida    || '',
+    payload.preferencia_voo_chegada  || '',
+    payload.preferencia_voo_paradas  !== undefined ? payload.preferencia_voo_paradas : '',
+    payload.preferencia_voo_bagagem  !== undefined ? payload.preferencia_voo_bagagem : '',
+    payload.preferencia_voo_valor    || '',
+    payload.preferencia_hotel_nome   || '',
+    payload.preferencia_hotel_estrelas || '',
+    payload.preferencia_hotel_diaria || '',
+    payload.preferencia_hotel_total  || '',
     // Exceção de saúde (preenchida depois via salvarExcecaoQuartoIndividual)
     payload.quarto_excecao_saude || false, '', '', '', '', '', '', '', '',
     // Casamento (preenchido pelo motor)
@@ -65,7 +78,7 @@ function submeterSolicitacao(payload) {
     // RH (4)
     payload.quarto_excecao_saude || false, '', '', '',
     // Status geral + agência
-    'Aguardando Cotação', '',
+    'Pendente Aprovação Liderança', '',
     // Cotações Tastur + Kontrip — 31 colunas cada = 62 vazias
     ...Array(62).fill(''),
     // Voucher (5)
@@ -75,17 +88,10 @@ function submeterSolicitacao(payload) {
   const sheet = SpreadsheetApp.openById(cfg.SHEET_ID).getSheetByName('Solicitacoes');
   sheet.appendRow(linha);
 
-  // 7. Motor de casamento (async — não bloqueia o usuário)
-  verificarCasamento(reqID);
+  // 7. Dispara e-mail de aprovação para a liderança direta (govern ança)
+  enviarEmailAprovacaoLideranca(reqID, viajante, payload, classificacao, cadeia);
 
-  // 8. Dispara e-mails para as agências
-  dispararEmailAgencias(reqID, viajante, payload, classificacao);
-
-  // 9. [MVP] Exceção de saúde: laudo já foi salvo no Drive (Drive.gs).
-  //    Validação pelo RH descartada (D15) — fluxo segue normal sem etapa RH.
-  //    Em V2: reabilitar notificarRHExcecaoSaude() e status 'Aguardando Aprovação RH'.
-
-  return { reqID, status: 'Aguardando Cotação', classificacao, antecedenciaDias };
+  return { reqID, status: 'Pendente Aprovação Liderança', classificacao, antecedenciaDias };
 }
 
 // ── Validações ───────────────────────────────────────────────
@@ -192,6 +198,23 @@ function submeterCotacaoAgencia(payload) {
   campos[`${prefixo}_obs`]               = payload.obs                  || '';
   campos[`${prefixo}_enviado_em`]        = new Date();
 
+  // Salva PDF da cotação no Drive (se enviado)
+  let linkPdfCotacao = '';
+  if (payload.cotacaoPdfBase64) {
+    try {
+      const cfg2    = getConfig();
+      const nomeArq = `Cotacao_${payload.agencia}_${payload.reqID}_${Utilities.formatDate(new Date(), 'America/Sao_Paulo', 'yyyyMMdd_HHmm')}.pdf`;
+      const blob    = Utilities.newBlob(Utilities.base64Decode(payload.cotacaoPdfBase64), 'application/pdf', nomeArq);
+      const pasta   = DriveApp.getFolderById(cfg2.PASTA_VOUCHERS_ID || cfg2.PASTA_LAUDOS_ID);
+      const arq     = pasta.createFile(blob);
+      arq.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      linkPdfCotacao = arq.getUrl();
+    } catch (e) {
+      Logger.log('[AVISO] Falha ao salvar PDF cotação: ' + e.message);
+    }
+  }
+  if (linkPdfCotacao) campos[`${prefixo}_obs`] = (campos[`${prefixo}_obs`] ? campos[`${prefixo}_obs`] + ' | ' : '') + 'PDF: ' + linkPdfCotacao;
+
   // Grava cada campo mapeado na linha correspondente
   for (let i = 1; i < dados.length; i++) {
     if (String(dados[i][idxReq]) !== String(payload.reqID)) continue;
@@ -201,19 +224,37 @@ function submeterCotacaoAgencia(payload) {
       if (idx >= 0) sheet.getRange(i + 1, idx + 1).setValue(val);
     });
 
-    // Atualiza status para 'Cotação Parcial' ou 'Aguardando Aprovação N1'
+    // Atualiza status para 'Cotação Parcial' ou 'Pendente Aprovação Setor'
     const idxStatus = header.indexOf('status');
     const statusAtual = String(dados[i][idxStatus]);
-    const novoStatus = statusAtual === 'Cotação Parcial' ? 'Aguardando Aprovação N1' : 'Cotação Parcial';
+
+    // Verifica se a OUTRA agência já enviou cotação (campo _enviado_em preenchido)
+    const outraPrefixo = prefixo === 'cotacao_tastur' ? 'cotacao_kontrip' : 'cotacao_tastur';
+    const idxOutraEnvio = header.indexOf(`${outraPrefixo}_enviado_em`);
+    const valorOutra = idxOutraEnvio >= 0 ? dados[i][idxOutraEnvio] : '__coluna_nao_encontrada__';
+    const outraJaEnviou = idxOutraEnvio >= 0 && valorOutra !== '' && valorOutra != null;
+
+    Logger.log(`[COTACAO DEBUG] agencia=${payload.agencia} | prefixo=${prefixo} | outraPrefixo=${outraPrefixo}`);
+    Logger.log(`[COTACAO DEBUG] idxOutraEnvio=${idxOutraEnvio} | valorOutra=${valorOutra} | outraJaEnviou=${outraJaEnviou}`);
+
+    const novoStatus = outraJaEnviou ? 'Pendente Aprovação Setor' : 'Cotação Parcial';
+    Logger.log(`[COTACAO DEBUG] statusAtual=${statusAtual} | novoStatus=${novoStatus}`);
     sheet.getRange(i + 1, idxStatus + 1).setValue(novoStatus);
     sheet.getRange(i + 1, header.indexOf('atualizado_em') + 1).setValue(new Date());
 
-    // Se ambas agências cotaram → dispara e-mail de aprovação N1
-    if (novoStatus === 'Aguardando Aprovação N1') {
+    // Se ambas agências cotaram → envia e-mail para EMAIL_VIAGENS com as cotações
+    if (novoStatus === 'Pendente Aprovação Setor') {
+      const cfg2 = getConfig();
+      Logger.log(`[COTACAO DEBUG] EMAIL_VIAGENS configurado: '${cfg2.EMAIL_VIAGENS}'`);
       const req = linhaParaObjeto(header, sheet.getRange(i + 1, 1, 1, header.length).getValues()[0]);
-      const cadeia = extrairCadeiaAprovacao(req.matricula_viajante);
-      enviarEmailAprovacaoN1(payload.reqID, req, cadeia);
-      atualizarStatusSolicitacao(payload.reqID, 'Pendente Aprovação N1');
+      Logger.log(`[SETOR EMAIL] Disparando enviarEmailAprovacaoSetor | req: ${payload.reqID}`);
+      try {
+        enviarEmailAprovacaoSetor(payload.reqID, req);
+        Logger.log(`[SETOR EMAIL] ✅ E-mail enviado com sucesso | req: ${payload.reqID}`);
+      } catch (emailErr) {
+        Logger.log(`[ERRO EMAIL SETOR] ❌ req: ${payload.reqID} | ${emailErr.message} | ${emailErr.stack}`);
+        // Não interrompe o fluxo: cotação já foi salva.
+      }
     }
     break;
   }
