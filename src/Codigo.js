@@ -177,17 +177,27 @@ function renderPaginaConfirmacao(acao) {
 }
 
 // ── calcularDistanciaKm (D1) ─────────────────────────────────
+// Usa Geocoder (built-in GAS, sem billing) + Haversine × 1.3 (fator rodoviário BR).
 function calcularDistanciaKm(origem, destino) {
   try {
-    const result = Maps.newDirectionFinder()
-      .setOrigin(origem + ', Brasil')
-      .setDestination(destino + ', Brasil')
-      .setMode(Maps.DirectionFinder.Mode.DRIVING)
-      .getDirections();
-    const legs = result && result.routes && result.routes[0] && result.routes[0].legs;
-    if (!legs || !legs[0]) throw new Error('Rota não encontrada');
-    const distM = legs[0].distance.value;
-    return { distanciaKm: Math.round(distM / 1000) };
+    const geo = Maps.newGeocoder().setRegion('BR').setLanguage('pt-BR');
+    const r1  = geo.geocode(origem  + ', Brasil');
+    const r2  = geo.geocode(destino + ', Brasil');
+    if (!r1.results || !r1.results[0]) throw new Error('Origem não encontrada: ' + origem);
+    if (!r2.results || !r2.results[0]) throw new Error('Destino não encontrado: ' + destino);
+    const l1 = r1.results[0].geometry.location;
+    const l2 = r2.results[0].geometry.location;
+    // Haversine
+    const R    = 6371;
+    const dLat = (l2.lat - l1.lat) * Math.PI / 180;
+    const dLon = (l2.lng - l1.lng) * Math.PI / 180;
+    const a    = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                 Math.cos(l1.lat * Math.PI / 180) * Math.cos(l2.lat * Math.PI / 180) *
+                 Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const reta = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const km   = Math.round(reta * 1.3);   // fator rodoviário médio Brasil
+    Logger.log('[calcularDistanciaKm] ' + origem + ' → ' + destino + ': ~' + km + ' km (reta ' + Math.round(reta) + ' km)');
+    return { distanciaKm: km };
   } catch (err) {
     Logger.log('[calcularDistanciaKm] ' + err.message);
     return { distanciaKm: null, erro: err.message };

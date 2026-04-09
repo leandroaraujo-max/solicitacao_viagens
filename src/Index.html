@@ -555,8 +555,9 @@ function calcularDistancia(origem, destino) {
   google.script.run
     .withSuccessHandler(r => {
       const badge = document.getElementById('badgeDistancia');
-      if (!r || !r.sucesso) { badge.classList.add('hidden'); return; }
-      const km = r.distanciaKm;
+      const dados = r?.dados || {};
+      if (!r?.sucesso || dados.distanciaKm == null) { badge.classList.add('hidden'); return; }
+      const km = dados.distanciaKm;
       estado.distanciaKm = km;
       estado.aereoElegivel = km >= 400;
       badge.classList.remove('hidden','badge-comum','badge-emergencial');
@@ -760,9 +761,10 @@ function debounceIATA(input, sugId) {
 function buscarIATA(termo, inputId, sugId) {
   google.script.run
     .withSuccessHandler(r => {
-      if (!r.sucesso || !r.locais.length) return;
+      const locais = r?.dados?.locais;
+      if (!r?.sucesso || !locais?.length) return;
       const el = document.getElementById(sugId);
-      el.innerHTML = r.locais.map(l =>
+      el.innerHTML = locais.map(l =>
         `<div class="amadeus-sug-item" onclick="selecionarIATA('${l.iataCode}','${l.cidade||l.nome}','${inputId}','${sugId}')">
           <strong>${l.iataCode}</strong> — ${l.cidade||l.nome} (${l.pais||''}) <em>${l.tipo}</em>
         </div>`).join('');
@@ -793,8 +795,8 @@ function buscarVoos() {
     .withSuccessHandler(r => {
       document.getElementById('loadingVoos').classList.add('hidden');
       setBtn('btnBuscarVoos', false, '🔍 Buscar voos');
-      if (!r.sucesso) { alertar('Erro na busca: ' + r.erro); return; }
-      renderizarVoos(r.opcoes);
+      if (!r.sucesso || !r.dados?.sucesso) { alertar('Erro na busca: ' + (r.erro || r.dados?.erro || 'Erro desconhecido')); return; }
+      renderizarVoos(r.dados.opcoes);
     })
     .withFailureHandler(e => {
       document.getElementById('loadingVoos').classList.add('hidden');
