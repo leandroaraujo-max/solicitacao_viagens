@@ -266,9 +266,7 @@
             <label for="excecaoObs">Observações adicionais</label>
             <textarea id="excecaoObs" rows="2" placeholder="Informações complementares (opcional)"></textarea>
           </div>
-          <div class="alert alert-info">
-            ⚠ A aprovação desta exceção será encaminhada ao RH / Medicina do Trabalho antes da confirmação da reserva.
-          </div>
+
         </div>
       </div>
     </div>
@@ -816,7 +814,6 @@ function renderizarVoos(opcoes) {
     <div class="amadeus-card" onclick="selecionarVoo(${i})" id="voo-card-${i}">
       <div style="display:flex;justify-content:space-between;align-items:center">
         <span><strong>${v.cia_nome||v.cia_codigo}</strong> ${v.numero_voo}</span>
-        <span class="amadeus-preco">R$ ${v.valor.toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
       </div>
       <div style="font-size:13px;color:#555;margin-top:4px">
         ${fmt(v.saida)} → ${fmt(v.chegada)} | ${fDur(v.duracao)}
@@ -844,7 +841,7 @@ function selecionarVoo(idx) {
   };
   const fmt = iso => new Date(iso).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
   document.getElementById('vooSelecionado').innerHTML =
-    `<div class="amadeus-selecionado-badge">✅ <strong>${v.cia_nome||v.cia_codigo} ${v.numero_voo}</strong> — ${fmt(v.saida)} → ${fmt(v.chegada)} — R$ ${v.valor.toLocaleString('pt-BR',{minimumFractionDigits:2})} <a href="#" onclick="limparVoo();return false" style="margin-left:8px;color:#e53935;font-size:12px">✕</a></div>`;
+    `<div class="amadeus-selecionado-badge">✅ <strong>${v.cia_nome||v.cia_codigo} ${v.numero_voo}</strong> — ${fmt(v.saida)} → ${fmt(v.chegada)} <a href="#" onclick="limparVoo();return false" style="margin-left:8px;color:#e53935;font-size:12px">✕</a></div>`;
   document.getElementById('vooSelecionado').classList.remove('hidden');
 }
 

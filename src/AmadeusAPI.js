@@ -147,7 +147,15 @@ function buscarVoosAmadeus(origem, destino, dataIda, dataVolta, adultos) {
       data: { slices: slices, passengers: passengers, cabin_class: 'economy' },
     });
 
-    const offers = (json.data && json.data.offers) || [];
+    // Filtra apenas Azul (AD), Gol (G3) e LATAM (LA / JJ)
+    const CIAS_PERMITIDAS = ['AD', 'G3', 'LA', 'JJ'];
+    const offers = ((json.data && json.data.offers) || []).filter(function(offer) {
+      try {
+        var seg0 = offer.slices[0].segments[0];
+        var cia  = (seg0.marketing_carrier || seg0.operating_carrier || {}).iata_code || '';
+        return CIAS_PERMITIDAS.indexOf(cia.toUpperCase()) !== -1;
+      } catch(e) { return false; }
+    });
     const opcoes = offers.slice(0, 10).map(function(offer) {
       try {
         const slice0  = offer.slices[0];

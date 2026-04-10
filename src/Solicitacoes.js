@@ -131,13 +131,21 @@ function submeterSolicitacao(payload) {
 
   // 8. Tratamento de laudo (se fornecido e não pré-aprovado)
   if (payload.laudoBase64 && payload.laudoNome && !payload.excecao_pre_aprovada) {
-    salvarExcecaoQuartoIndividual({
-      reqID,
-      laudoBase64: payload.laudoBase64,
-      laudoNome:   payload.laudoNome,
-      excecao_cid: payload.excecao_cid,
-      excecao_validade: payload.excecao_validade,
-    });
+    try {
+      salvarExcecaoQuartoIndividual({
+        reqID,
+        contexto:         'solicitacao',
+        matricula:        viajante.matricula || payload.matricula_viajante,
+        laudoBase64:      payload.laudoBase64,
+        laudoNome:        payload.laudoNome,
+        motivo:           payload.excecao_motivo || '',
+        cid:              payload.excecao_cid    || '',
+        validade:         payload.excecao_validade || '',
+      });
+    } catch (errLaudo) {
+      Logger.log('[submeterSolicitacao] Erro ao salvar laudo: ' + errLaudo.message);
+      // Não falha a solicitação — loga e continua
+    }
   }
 
   // 9. Dispara e-mail de aprovação para a liderança direta
