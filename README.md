@@ -2,9 +2,9 @@
 
 > **Projeto:** Automação do processo de viagens corporativas Magalu / Luizalabs  
 > **Stack:** Google Apps Script · BigQuery · Google Sheets · Google Drive · Duffel Flights API  
-> **Status:** 🟢 MVP em produção — Deploy @37  
+> **Status:** 🟢 v2 em produção — Deploy @42  
 > **Data de início:** 08/04/2026  
-> **Último deploy:** 09/04/2026 — @37  
+> **Último deploy:** 09/04/2026 — @42  
 
 ---
 
@@ -30,17 +30,34 @@
 | Portal do Viajante (`Index.html`) | ✅ Produção |
 | Portal da Agência (`PortalAgencia.html`) | ✅ Produção |
 | Portal de Aprovação (`PortalAprovacao.html`) | ✅ Produção |
-| Fluxo Liderança → Agências → Setor | ✅ Produção |
-| Integração BigQuery (cache-aside) | ✅ Produção |
+| Fluxo Liderança → Pré-aprovação Setor → Agências | ✅ Produção |
+| Integração BigQuery (cache-aside por CPF) | ✅ Produção |
 | Casamento de solicitações | ✅ Produção |
 | Delegações | ✅ Produção |
-| Busca consultiva de voos — Duffel API | ✅ Produção (sandbox) |
+| Busca consultiva de voos — Duffel API (Azul/Gol/LATAM) | ✅ Produção (sandbox) |
+| Busca separada por trecho (Ida / Volta) | ✅ Produção |
+| Autocomplete de cidades/aeroportos (Duffel Places) | ✅ Produção |
+| Cálculo de distância (Geocoder + Haversine) | ✅ Produção |
 | Preferência de hospedagem (campo livre) | ✅ Produção |
+| Upload de laudos médicos no Drive | ✅ Produção |
 | Upload de vouchers | ✅ Produção |
 | SLA checker (time-based trigger) | ✅ Produção |
+| Pré-aprovação do Setor (E1) | ✅ Produção |
+| Verificação de férias do N1 (C2) | ✅ Produção |
+| Campos de origem, observações, bagagem, rodoviário, carro | ✅ Produção |
 
-**Deploy ativo:** `AKfycbzi3Cy5rJ2pB2QH1B7p-d7HUw9xNPwF1pUrUS6lDRmznQ-Ss1X2js_YNr3wK6vBSTTh` @37  
+**Deploy ativo:** `AKfycbzi3Cy5rJ2pB2QH1B7p-d7HUw9xNPwF1pUrUS6lDRmznQ-Ss1X2js_YNr3wK6vBSTTh` @42  
 **Script ID:** `157FO7diD5kMP3FWh6tkFvPveElKHhVzJKrdPMqTvaQw-sce_wTq4jwXX`
+
+### Histórico de Deploys
+
+| Deploy | Commit | Descrição |
+|---|---|---|
+| @38 | `da7aae8` | feat: v2 completo — CPF, origem viagem, rodoviário, pré-aprovação setor, férias N1, distância 400km, observações, carro completo (A1-A6, B1-B4, C1-C2, D1, E1-E3) |
+| @39 | `c97044b` | fix: resolver IATA automaticamente — `_resolverIATA()` em `buscarVoosAmadeus` |
+| @40 | `604fdea` | fix: distância Geocoder+Haversine, autocomplete `r.dados.locais`, voos `r.dados.opcoes` |
+| @41 | `d1a7438` | fix: filtro Azul/Gol/LATAM, sem preço nos voos, sem alerta RH, corrige upload laudo (matrícula) |
+| @42 | `1c46322` | feat: busca voo ida/volta separada, dedup resultados, badges por trecho, CSS `btn-trecho` |
 
 ---
 
@@ -297,11 +314,14 @@ o ciclo de questionamentos entre setor e solicitante.
 | `_duffelToken()` | Lê o `DUFFEL_TOKEN` das Script Properties. |
 | `_duffelGet(path)` | GET autenticado na API Duffel com headers `Authorization` e `Duffel-Version`. |
 | `_duffelPost(path, body)` | POST autenticado na API Duffel. |
-| `buscarLocaisAmadeus(termo)` | Autocomplete de aeroportos/cidades via `GET /places/suggestions`. |
-| `buscarVoosAmadeus(origem, destino, dataIda, dataVolta, adultos)` | Busca ofertas de voo via `POST /air/offer_requests`. Retorna array normalizado com cia, número do voo, horários, paradas, bagagem e valor. |
+| `buscarLocaisAmadeus(termo)` | Autocomplete de aeroportos/cidades via `GET /places/suggestions`. Retorna até 8 resultados com `iataCode`, nome, cidade, país e tipo. |
+| `_resolverIATA(valor)` | Garante que o valor passado é um código IATA válido (3 letras). Se for nome de cidade (ex.: "Campinas"), consulta automaticamente a Places API e retorna o IATA correspondente. Evita erros quando o usuário digita sem selecionar o autocomplete. |
+| `buscarVoosAmadeus(origem, destino, dataIda, dataVolta, adultos)` | Busca ofertas one-way ou round-trip via `POST /air/offer_requests`. Filtra automaticamente apenas **Azul (AD), Gol (G3) e LATAM (LA/JJ)**. Retorna array normalizado com cia, número do voo, horários, paradas, bagagem e valor. |
 | `buscarHoteisAmadeus()` | Stub — retorna array vazio. Preferência de hotel é campo de texto livre no frontend. |
 
 **Script Property necessária:** `DUFFEL_TOKEN` = `duffel_test_...` (painel: More → Developers → Access Tokens)
+
+> **Regra de negócio:** Somente passagens das companhias **Azul, Gol e LATAM** são adquiridas pela empresa. O filtro é aplicado no backend antes de retornar os resultados ao portal.
 
 ---
 
@@ -312,7 +332,7 @@ o ciclo de questionamentos entre setor e solicitante.
 | `enviarEmailAprovacaoN2(reqID, req, emailN1, agenciaEscolhidaN1)` | Envia e-mail ao aprovador N2 informando a decisão do N1 e solicitando confirmação. Se não houver N2, notifica o setor para aprovação manual. |
 | `notificarRHExcecaoSaude(reqID, viajante, solicitacao)` | **MVP: desabilitada (D15).** Stub que apenas registra no log. Prevista para V2. |
 | `notificarViajanteSolicitacaoAprovada(req, agencia)` | Envia e-mail ao viajante informando aprovação e agência responsável pela reserva. |
-| `notificarReprovacao(req, emailAprovador, etapa)` | Notifica o viajante sobre a reprovação informando a etapa (N1/N2) e o contato do setor. |
+| `notificarReprovacao(req, emailAprovador, etapa, nomeGestor)` | Notifica o viajante sobre a reprovação informando a etapa (N1/N2), o nome do gestor responsável e o contato do setor. |
 | `notificarAgenciaVencedora(req, agencia)` | Avisa a agência selecionada que deve emitir o voucher. |
 | `notificarAgenciaPerdedora(req, agenciaVencedora)` | Informa à agência não selecionada que sua cotação não foi escolhida. |
 | `notificarSetorMatchEncontrado(req, candidato, tipo)` | Alerta o setor de viagens sobre duas solicitações similares identificadas pelo motor de casamento. |
@@ -330,7 +350,7 @@ o ciclo de questionamentos entre setor e solicitante.
 
 | Arquivo | Descrição |
 |---|---|
-| `Index.html` | **Portal do Viajante.** Interface principal para identificação por matrícula, seleção do tipo de solicitação (própria ou delegada), preenchimento dos dados da viagem (destino, datas, tipo de serviço, colega de viagem) e submissão. Chama o servidor via `google.script.run`. |
+| `Index.html` | **Portal do Viajante.** Interface principal. Identificação via CPF, suporte a delegação, campos de origem/destino (cidade + estado), datas, tipo de serviço (aéreo, rodoviário, hospedagem, carro), motivo, observações, bagagem extra, locação de veículo, viajantes adicionais (casamento). Seção de preferências com **busca de voos por trecho (Ida / Volta)** — autocomplete de cidades/aeroportos via Duffel Places, exibe apenas Azul/Gol/LATAM sem mostrar preços, com deduplicação de resultados e badges separados por trecho selecionado. Cálculo automático de distância (Geocoder + Haversine) com badge elegibilidade aéreo (≥400 km). |
 | `PortalAgencia.html` | **Portal do Prestador.** Interface exclusiva por link tokenizado para que a agência preencha a cotação (dados de aéreo, hospedagem e carro) e faça upload dos vouchers em PDF, em momentos distintos do fluxo. |
 | `PortalAprovacao.html` | **Página de Confirmação.** Renderizada após o clique em um link de aprovação/reprovação, confirmando ao aprovador que a ação foi registrada. |
 | `Estilos.html` | **CSS Compartilhado.** Folha de estilos incluída via `<?!= include('Estilos'); ?>` em todos os portais. Define o design system com as cores Magalu (azul `#0086FF`, amarelo `#FFCE00`). |
@@ -366,38 +386,15 @@ solicitacao_viagens/
 
 ---
 
-## Próximos Passos v2
+## Próximos Passos
 
-Melhorias planejadas para a próxima versão (ver plano completo no histórico do chat):
+Itens pendentes identificados para versões futuras:
 
-**Sprint 1 — UX imediato:**
-- [ ] B2 — Indicador visual de loading em todos os botões
-- [ ] B3 — Link para Política de Viagens Magalu no header
-- [ ] B1 — Centro de custo + código no perfil do viajante e nos e-mails
-
-**Sprint 2 — Campos do formulário:**
-- [ ] A1 — Origem da viagem (cidade/estado)
-- [ ] A2 — Campo observações do viajante
-- [ ] A3 — Bagagem extra despachada
-- [ ] A4 — Período preferido (manhã/tarde/noite) + tipo (ida/volta/ambos)
-- [ ] B4 — Motivo e observações exibidos nos e-mails e portal da agência
-- [ ] E2 — E-mail de reprovação com nome do gestor + só viajante recebe
-
-**Sprint 3 — Novos modais de transporte:**
-- [ ] A5 — Transporte rodoviário + alerta ônibus leito (19h–06h)
-- [ ] A6 — Locação de veículo com campos completos (retirada/devolução/hora)
-
-**Sprint 4 — Regras de negócio:**
-- [ ] D1 — Bloqueio de aéreo para distâncias < 400km (Maps Distance Matrix)
-- [ ] C1 — Busca por CPF em vez de matrícula (compliance LGPD)
-
-**Sprint 5 — Dados e aprovações:**
-- [ ] E3 — Condição especial: verificar cadastro existente, não pedir laudo de novo
-- [ ] C2 — Verificar férias do N1 → fallback automático para N2
-
-**Sprint 6 — Fluxo de aprovação (arquitetural):**
-- [ ] E1 — Pré-aprovação do Setor de Viagens antes das agências cotarem
-- [ ] E1 — DL para e-mails do setor (`DL_VIAGENS` Script Property)
+- [ ] Notificação ao Setor quando `PASTA_LAUDOS_ID` não estiver configurado (alerta de configuração)
+- [ ] Dashboard Looker Studio com custos e SLAs
+- [ ] Integração com sistema de créditos / reembolso
+- [ ] Testes automatizados das funções críticas (GAS + Jasmine ou similar)
+- [ ] Passagem para ambiente Duffel produção (`duffel_live_...`) após homologação
 
 ---
 
