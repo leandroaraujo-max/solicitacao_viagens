@@ -290,6 +290,12 @@
       <!-- Busca de Voo -->
       <div id="secaoBuscaVoo" class="hidden">
         <h4 style="margin:12px 0 8px">✈ Busca de Voo</h4>
+        <!-- Seletor de trecho -->
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <button class="btn-trecho btn-trecho-ativo" id="btnTrechoIda"   onclick="selecionarTrecho('ida')">✈ Voo de Ida</button>
+          <button class="btn-trecho"                  id="btnTrechoVolta" onclick="selecionarTrecho('volta')">↩ Voo de Volta</button>
+        </div>
+        <p id="labelTrecho" class="field-hint" style="margin-bottom:8px">Buscando preferência para o <strong>voo de ida</strong>.</p>
         <div class="grid-2" style="align-items:end">
           <div class="field-group">
             <label>Origem (cidade ou IATA)</label>
@@ -311,7 +317,9 @@
         <button class="btn-secondary" onclick="buscarVoos()" style="margin-top:8px" id="btnBuscarVoos">🔍 Buscar voos</button>
         <div id="loadingVoos" class="field-hint hidden" style="margin-top:8px"><em>Buscando voos disponíveis...</em></div>
         <div id="resultadosVoos" class="amadeus-resultados hidden"></div>
-        <div id="vooSelecionado" class="amadeus-selecionado hidden"></div>
+        <!-- Badges separados para ida e volta -->
+        <div id="vooSelecionadoIda"   class="amadeus-selecionado hidden"></div>
+        <div id="vooSelecionadoVolta" class="amadeus-selecionado hidden"></div>
       </div>
 
       <!-- Preferência de Hotel (campo livre) -->
@@ -367,11 +375,14 @@ const estado = {
   ehDelegacao: false,
   laudoBase64: null,
   laudoNome: null,
-  preferencia_voo: null,
+  preferencia_voo_ida:   null,
+  preferencia_voo_volta: null,
   preferencia_hotel: null,
   iataOrigem: '',
   iataDestino: '',
+  trecho: 'ida',
   _voosResultados: [],
+  _trechoAtual: 'ida',
   condicaoEspecialPreAprovada: false,
 };
 
@@ -596,6 +607,7 @@ function onServicoChange() {
   }
 
   document.getElementById('secaoBuscaVoo').classList.toggle('hidden', !temAereo);
+  if (temAereo) selecionarTrecho('ida');  // inicializa tabs e pré-preenche campos
   document.getElementById('secaoBuscaHotel').classList.toggle('hidden', !temHosp);
 
   // valida aéreo vs distância
@@ -727,8 +739,9 @@ function submeterSolicitacao() {
     laudoBase64:             estado.laudoBase64 || null,
     laudoNome:               estado.laudoNome   || null,
     // preferências Duffel
-    ...(estado.preferencia_voo   || {}),
-    ...(estado.preferencia_hotel || {}),
+    ...(estado.preferencia_voo_ida   || {}),
+    ...(estado.preferencia_voo_volta  || {}),
+    ...(estado.preferencia_hotel      || {}),
   };
 
   setBtn('btnSubmeter', true, 'Enviar solicitação ✓');
@@ -779,13 +792,38 @@ function selecionarIATA(iata, cidade, inputId, sugId) {
   else { estado.iataDestino = iata; document.getElementById('amadeusDestinoIATA').textContent = iata; }
 }
 
+function selecionarTrecho(trecho) {
+  estado.trecho = trecho;
+  document.getElementById('btnTrechoIda').classList.toggle('btn-trecho-ativo',   trecho === 'ida');
+  document.getElementById('btnTrechoVolta').classList.toggle('btn-trecho-ativo', trecho === 'volta');
+  const cidadeIda   = document.getElementById('origemCidade').value.trim();
+  const cidadeVolta = document.getElementById('destino').value.trim();
+  if (trecho === 'ida') {
+    document.getElementById('amadeusOrigem').value  = cidadeIda;
+    document.getElementById('amadeusDestino').value = cidadeVolta;
+    document.getElementById('labelTrecho').innerHTML = 'Buscando preferência para o <strong>voo de ida</strong>.';
+  } else {
+    document.getElementById('amadeusOrigem').value  = cidadeVolta;
+    document.getElementById('amadeusDestino').value = cidadeIda;
+    document.getElementById('labelTrecho').innerHTML = 'Buscando preferência para o <strong>voo de volta</strong>.';
+  }
+  // Limpa IATA e resultados ao trocar de trecho
+  estado.iataOrigem = ''; estado.iataDestino = '';
+  document.getElementById('amadeusOrigemIATA').textContent  = '';
+  document.getElementById('amadeusDestinoIATA').textContent = '';
+  document.getElementById('resultadosVoos').classList.add('hidden');
+  document.getElementById('resultadosVoos').innerHTML = '';
+}
+
 function buscarVoos() {
+  const trecho  = estado.trecho || 'ida';
   const origem  = estado.iataOrigem  || document.getElementById('amadeusOrigem').value.trim().toUpperCase();
   const destino = estado.iataDestino || document.getElementById('amadeusDestino').value.trim().toUpperCase();
   const dataIda   = document.getElementById('dataIda').value;
   const dataVolta = document.getElementById('dataVolta').value;
+  const dataBusca = trecho === 'volta' ? dataVolta : dataIda;
   if (!origem || !destino) return alertar('Informe origem e destino para buscar voos.');
-  if (!dataIda) return alertar('Informe a data de ida antes de buscar voos.');
+  if (!dataBusca) return alertar(trecho === 'volta' ? 'Informe a data de volta na solicitação antes de buscar o voo de volta.' : 'Informe a data de ida antes de buscar voos.');
   document.getElementById('resultadosVoos').classList.add('hidden');
   document.getElementById('loadingVoos').classList.remove('hidden');
   setBtn('btnBuscarVoos', true, '🔍 Buscar voos');
@@ -794,27 +832,35 @@ function buscarVoos() {
       document.getElementById('loadingVoos').classList.add('hidden');
       setBtn('btnBuscarVoos', false, '🔍 Buscar voos');
       if (!r.sucesso || !r.dados?.sucesso) { alertar('Erro na busca: ' + (r.erro || r.dados?.erro || 'Erro desconhecido')); return; }
-      renderizarVoos(r.dados.opcoes);
+      renderizarVoos(r.dados.opcoes, trecho);
     })
     .withFailureHandler(e => {
       document.getElementById('loadingVoos').classList.add('hidden');
       setBtn('btnBuscarVoos', false, '🔍 Buscar voos');
       alertar('Falha: ' + e.message);
     })
-    .doPost_proxy({ acao: 'buscarVoosAmadeus', origem, destino, dataIda, dataVolta: dataVolta||null });
+    // Busca sempre one-way (1 slice) — preferência por trecho separada
+    .doPost_proxy({ acao: 'buscarVoosAmadeus', origem, destino, dataIda: dataBusca, dataVolta: null });
 }
 
-function renderizarVoos(opcoes) {
+function renderizarVoos(opcoes, trecho) {
+  // Deduplica por numero_voo + hora de partida (mesma oferta em múltiplos fare classes)
+  const vistos = new Set();
+  opcoes = opcoes.filter(v => {
+    const key = (v.numero_voo || '') + '|' + (v.saida || '').substring(0, 16);
+    if (vistos.has(key)) return false;
+    vistos.add(key); return true;
+  });
+  estado._voosResultados = opcoes;
+  estado._trechoAtual    = trecho || estado.trecho || 'ida';
   const el = document.getElementById('resultadosVoos');
-  if (!opcoes.length) { el.innerHTML='<p class="field-hint">Nenhum voo encontrado.</p>'; el.classList.remove('hidden'); return; }
+  if (!opcoes.length) { el.innerHTML='<p class="field-hint">Nenhum voo encontrado para as companhias permitidas (Azul, Gol, LATAM).</p>'; el.classList.remove('hidden'); return; }
   const fmt  = iso => iso ? new Date(iso).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
   const fDur = iso => iso ? iso.replace('PT','').replace('H','h ').replace('M','min') : '';
   el.innerHTML = '<p class="field-hint" style="margin-bottom:8px">Clique para selecionar:</p>'
     + opcoes.map((v,i)=>`
     <div class="amadeus-card" onclick="selecionarVoo(${i})" id="voo-card-${i}">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <span><strong>${v.cia_nome||v.cia_codigo}</strong> ${v.numero_voo}</span>
-      </div>
+      <div><strong>${v.cia_nome||v.cia_codigo}</strong> ${v.numero_voo}</div>
       <div style="font-size:13px;color:#555;margin-top:4px">
         ${fmt(v.saida)} → ${fmt(v.chegada)} | ${fDur(v.duracao)}
         | ${v.paradas===0?'<span style="color:#2e7d32">direto</span>':v.paradas+' parada(s)'}
@@ -822,32 +868,57 @@ function renderizarVoos(opcoes) {
       </div>
     </div>`).join('');
   el.classList.remove('hidden');
-  estado._voosResultados = opcoes;
 }
 
 function selecionarVoo(idx) {
   const v = estado._voosResultados[idx];
   if (!v) return;
+  const trecho  = estado._trechoAtual || 'ida';
+  const badgeId = trecho === 'volta' ? 'vooSelecionadoVolta' : 'vooSelecionadoIda';
+  const label   = trecho === 'volta' ? 'Volta' : 'Ida';
   document.querySelectorAll('.amadeus-card').forEach(c => c.classList.remove('amadeus-card-ativo'));
   document.getElementById('voo-card-'+idx)?.classList.add('amadeus-card-ativo');
-  estado.preferencia_voo = {
-    preferencia_voo_cia:     v.cia_nome||v.cia_codigo,
-    preferencia_voo_numero:  v.numero_voo,
-    preferencia_voo_saida:   v.saida,
-    preferencia_voo_chegada: v.chegada,
-    preferencia_voo_paradas: v.paradas,
-    preferencia_voo_bagagem: v.bagagem,
-    preferencia_voo_valor:   v.valor,
+  const pref = {
+    cia:     v.cia_nome||v.cia_codigo,
+    numero:  v.numero_voo,
+    saida:   v.saida,
+    chegada: v.chegada,
+    paradas: v.paradas,
+    bagagem: v.bagagem,
   };
+  if (trecho === 'volta') {
+    estado.preferencia_voo_volta = {
+      preferencia_voo_volta_cia:     pref.cia,
+      preferencia_voo_volta_numero:  pref.numero,
+      preferencia_voo_volta_saida:   pref.saida,
+      preferencia_voo_volta_chegada: pref.chegada,
+      preferencia_voo_volta_paradas: pref.paradas,
+      preferencia_voo_volta_bagagem: pref.bagagem,
+    };
+  } else {
+    estado.preferencia_voo_ida = {
+      preferencia_voo_cia:     pref.cia,
+      preferencia_voo_numero:  pref.numero,
+      preferencia_voo_saida:   pref.saida,
+      preferencia_voo_chegada: pref.chegada,
+      preferencia_voo_paradas: pref.paradas,
+      preferencia_voo_bagagem: pref.bagagem,
+    };
+  }
   const fmt = iso => new Date(iso).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
-  document.getElementById('vooSelecionado').innerHTML =
-    `<div class="amadeus-selecionado-badge">✅ <strong>${v.cia_nome||v.cia_codigo} ${v.numero_voo}</strong> — ${fmt(v.saida)} → ${fmt(v.chegada)} <a href="#" onclick="limparVoo();return false" style="margin-left:8px;color:#e53935;font-size:12px">✕</a></div>`;
-  document.getElementById('vooSelecionado').classList.remove('hidden');
+  document.getElementById(badgeId).innerHTML =
+    `<div class="amadeus-selecionado-badge">✅ <strong>[${label}] ${pref.cia} ${pref.numero}</strong> — ${fmt(pref.saida)} → ${fmt(pref.chegada)} <a href="#" onclick="limparVoo('${trecho}');return false" style="margin-left:8px;color:#e53935;font-size:12px">✕</a></div>`;
+  document.getElementById(badgeId).classList.remove('hidden');
 }
 
-function limparVoo() {
-  estado.preferencia_voo = null;
-  document.getElementById('vooSelecionado').classList.add('hidden');
+function limparVoo(trecho) {
+  if (!trecho || trecho === 'ida') {
+    estado.preferencia_voo_ida = null;
+    document.getElementById('vooSelecionadoIda').classList.add('hidden');
+  } else {
+    estado.preferencia_voo_volta = null;
+    document.getElementById('vooSelecionadoVolta').classList.add('hidden');
+  }
   document.querySelectorAll('.amadeus-card').forEach(c => c.classList.remove('amadeus-card-ativo'));
 }
 
