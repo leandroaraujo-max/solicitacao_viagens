@@ -266,6 +266,20 @@
   let _laudoPCDBase64 = null;
   let _laudoPCDNome   = null;
 
+  function _redirecionarParaPortal(token) {
+    var form = document.createElement('form');
+    form.method = 'GET';
+    form.action = WEBAPP_URL;
+    var inp = document.createElement('input');
+    inp.type  = 'hidden';
+    inp.name  = 'sessionToken';
+    inp.value = token;
+    form.appendChild(inp);
+    form.target = '_top';
+    document.body.appendChild(form);
+    form.submit();
+  }
+
   function showTab(name) {
     document.querySelectorAll('.panel').forEach(function(p) { p.classList.remove('active'); });
     document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
@@ -340,7 +354,7 @@
             document.querySelectorAll('.tab-btn').forEach(function(b) { b.style.display = 'none'; });
             showTab('trocar-senha');
           } else {
-            window.top.location.href = WEBAPP_URL + '?sessionToken=' + encodeURIComponent(d.token);
+            _redirecionarParaPortal(d.token);
           }
         } else {
           mostrarMsg('msg-login', resp && resp.erro ? resp.erro : 'Erro ao fazer login.', 'erro');
@@ -384,7 +398,7 @@
       .withSuccessHandler(function(resp) {
         setLoading('btn-trocar', false, 'Definir minha senha');
         if (resp && resp.sucesso) {
-          window.top.location.href = WEBAPP_URL + '?sessionToken=' + encodeURIComponent(_sessionToken);
+          _redirecionarParaPortal(_sessionToken);
         } else {
           mostrarMsg('msg-trocar', resp && resp.erro ? resp.erro : 'Erro ao alterar senha.', 'erro');
         }
