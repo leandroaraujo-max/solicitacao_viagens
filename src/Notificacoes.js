@@ -307,6 +307,8 @@ function dispararEmailAgencias(reqID, viajante, solicitacao, classificacao) {
 
   agencias.forEach(ag => {
     const linkAg  = `${cfg.WEBAPP_URL}?reqID=${reqID}&tipo=agencia&ag=${ag.nome.toLowerCase()}`;
+    const _fmtCpf = (c) => { const s = String(c||'').replace(/\D/g,'').padStart(11,'0'); return s.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/,'$1.$2.$3-$4'); };
+    const _fmtNasc = (d) => { if (!d) return '&#8212;'; try { return Utilities.formatDate(new Date(d),'America/Sao_Paulo','dd/MM/yyyy'); } catch(e) { return String(d); } };
     const dataIda   = solicitacao.data_ida   ? Utilities.formatDate(new Date(solicitacao.data_ida),   'America/Sao_Paulo', 'dd/MM/yyyy') : '&#8212;';
     const dataVolta = solicitacao.data_volta ? Utilities.formatDate(new Date(solicitacao.data_volta), 'America/Sao_Paulo', 'dd/MM/yyyy') : '&#8212;';
     const origem = solicitacao.origem_cidade

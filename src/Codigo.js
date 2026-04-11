@@ -788,7 +788,7 @@ function TESTE_executarFluxo_(MEU_EMAIL) {
     excecao_obs:             '[TESTE] Condição pré-aprovada no cadastro',
   };
   sheet.appendRow(hdr.map(col => (dadosTeste[col] !== undefined ? dadosTeste[col] : '')));
-  Logger.log('[TESTE][1/7] ✅ Solicitação criada: ' + reqID);
+  Logger.log('[TESTE][1/8] Solicitacao criada: ' + reqID);
 
   // viajante e cadeia usados nas funções de email
   const viajante = {
