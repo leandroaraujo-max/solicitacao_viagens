@@ -19,6 +19,7 @@
       <a href="https://drive.google.com/file/d/1SFxzQXkTSr36KR4xJLNwp6vNMCa9_Rrg/view" target="_blank" style="color:#FFCE00;font-size:12px;text-decoration:none" title="Política de Viagens">📄 Política de Viagens</a>
       <span class="badge-magalu">Magalu</span>
       <span id="headerNomeUsuario" style="color:#fff;font-size:13px;font-weight:600;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+      <span id="headerTelefone" style="color:#ccc;font-size:11px"></span>
       <button onclick="fazerLogout()" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.4);color:#fff;font-size:12px;padding:6px 12px;border-radius:6px;cursor:pointer" title="Sair do portal">Sair</button>
     </div>
   </div>
@@ -176,17 +177,8 @@
           <input type="checkbox" id="chkBagagemExtra"> Necessidade de despachar bagagem extra
         </label>
       </div>
-      <!-- B6: preferência de cabine para busca Duffel -->
-      <div class="field-group">
-        <label class="form-label">Classe de cabine preferida</label>
-        <select id="selCabine" class="form-control">
-          <option value="">Qualquer cabine</option>
-          <option value="economy" selected>Economy</option>
-          <option value="premium_economy">Premium Economy</option>
-          <option value="business">Business</option>
-          <option value="first">First</option>
-        </select>
-      </div>
+      <!-- Cabine fixa economy para evitar tarifas caras -->
+      <input type="hidden" id="selCabine" value="economy" />
     </div>
 
     <!-- Bloco Rodoviário -->
@@ -239,7 +231,8 @@
       <div class="grid-2">
         <div class="field-group">
           <label>Cidade/aeroporto de retirada <span class="req">*</span></label>
-          <input type="text" id="carroRetiradaLocal" placeholder="Ex: Aeroporto de Congonhas" />
+          <input type="text" id="carroRetiradaLocal" placeholder="Ex: Congonhas, GRU..." oninput="debounceIATA(this, 'sugCarroRetirada')" autocomplete="off" />
+          <div id="sugCarroRetirada" class="iata-suggestions hidden"></div>
         </div>
         <div class="field-group">
           <label>Data e hora de retirada <span class="req">*</span></label>
@@ -249,7 +242,8 @@
       <div class="grid-2">
         <div class="field-group">
           <label>Cidade/aeroporto de devolução <span class="req">*</span></label>
-          <input type="text" id="carroDevolucaoLocal" placeholder="Ex: Mesmo local de retirada" />
+          <input type="text" id="carroDevolucaoLocal" placeholder="Ex: Congonhas, GRU..." oninput="debounceIATA(this, 'sugCarroDevolucao')" autocomplete="off" />
+          <div id="sugCarroDevolucao" class="iata-suggestions hidden"></div>
         </div>
         <div class="field-group">
           <label>Data e hora de devolução <span class="req">*</span></label>
@@ -382,17 +376,6 @@
       </div>
     </div>
 
-    <!-- Viajantes adicionais (casamento de viagem) -->
-    <div class="card card-inner">
-      <h3>👥 Viajantes adicionais <span style="font-size:13px;font-weight:normal;color:#888">(casamento de viagem — opcional)</span></h3>
-      <p class="field-hint">Informe colegas com a mesma viagem para otimizar a cotação.</p>
-      <div class="input-row">
-        <input type="text" id="matriculaColega" placeholder="CPF do colega" maxlength="14" oninput="mascaraCPF(this)" />
-        <button class="btn-secondary" id="btnVerificarColega" onclick="buscarColega()">Verificar compatibilidade</button>
-      </div>
-      <div id="infoColega" class="hidden"></div>
-    </div>
-
     <div class="btn-row">
       <button class="btn-outline" onclick="voltarParaIdentificacao()">← Voltar</button>
       <button class="btn-primary" id="btnSubmeter" onclick="submeterSolicitacao()">
@@ -421,6 +404,7 @@ const SESSION_NOME  = '<?= sessionNome ?>';
 const SESSION_EMAIL = '<?= sessionEmail ?>';
 const SESSION_TOKEN = '<?= sessionToken ?>';
 const WEBAPP_URL    = '<?= webAppUrl ?>';
+const SESSION_TELEFONE = '<?= sessionTelefone ?>';
 
 // B1: lista de valores que representam modalidades de serviço (evita capturar outros checkboxes)
 const SERVICOS_VALIDOS = ['Aereo', 'Rodoviario', 'Hospedagem', 'Carro'];
@@ -535,6 +519,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const el = document.getElementById('headerNomeUsuario');
     if (el) el.textContent = SESSION_NOME;
   }
+  if (SESSION_TELEFONE) {
+    const elTel = document.getElementById('headerTelefone');
+    if (elTel) elTel.textContent = '📱 ' + SESSION_TELEFONE;
+  }
 
   // Se há CPF de sessão, pré-preenche e identifica automaticamente
   if (SESSION_CPF && SESSION_CPF.length === 11) {
@@ -588,6 +576,8 @@ function renderizarDadosCadastrais(v) {
     '<span>' + (v.centro_custo || '—') + '</span></div>' +
     (v.cod_centro_custo ? '<div><span style="font-size:11px;color:#1565c0;font-weight:600;display:block">Cód. Centro de Custo</span>' +
     '<span>' + v.cod_centro_custo + '</span></div>' : '') +
+    (v.telefone ? '<div><span style="font-size:11px;color:#1565c0;font-weight:600;display:block">Celular</span>' +
+    '<span>' + v.telefone + '</span></div>' : '') +
     '<div><span style="font-size:11px;color:#1565c0;font-weight:600;display:block">Cargo</span>' +
     '<span>' + (v.cargo || '—') + '</span></div>' +
     '</div>';
@@ -952,6 +942,7 @@ function renderizarPerfilViajante() {
       <span><label>Filial</label>${v.filial}</span>
       <span><label>Centro de Custo</label>${v.centro_custo || '—'}</span>
       ${v.cod_centro_custo ? `<span><label>Cód. Centro de Custo</label>${v.cod_centro_custo}</span>` : ''}
+      ${v.telefone ? `<span><label>Celular</label>${v.telefone}</span>` : ''}
       <span><label>🏨 Hospedagem</label><strong class="${v.categoria_hospedagem==='Individual'?'txt-individual':''}">${v.categoria_hospedagem}</strong></span>
       <span><label>🚗 Veículo</label><strong>${v.categoria_veiculo}</strong></span>
     </div>`;
@@ -1117,15 +1108,16 @@ function selecionarTrecho(trecho) {
   estado.trecho = trecho;
   document.getElementById('btnTrechoIda').classList.toggle('btn-trecho-ativo',   trecho === 'ida');
   document.getElementById('btnTrechoVolta').classList.toggle('btn-trecho-ativo', trecho === 'volta');
-  const cidadeIda   = document.getElementById('origemCidade').value.trim();
-  const cidadeVolta = document.getElementById('destino').value.trim();
+  // Não pré-preenche origem/destino — Duffel exige que o usuário digite para sugerir aeroporto correto
+  document.getElementById('amadeusOrigem').value  = '';
+  document.getElementById('amadeusDestino').value = '';
   if (trecho === 'ida') {
-    document.getElementById('amadeusOrigem').value  = cidadeIda;
-    document.getElementById('amadeusDestino').value = cidadeVolta;
+    document.getElementById('amadeusOrigem').placeholder  = 'Digite a cidade de origem...';
+    document.getElementById('amadeusDestino').placeholder = 'Digite a cidade de destino...';
     document.getElementById('labelTrecho').innerHTML = 'Buscando preferência para o <strong>voo de ida</strong>.';
   } else {
-    document.getElementById('amadeusOrigem').value  = cidadeVolta;
-    document.getElementById('amadeusDestino').value = cidadeIda;
+    document.getElementById('amadeusOrigem').placeholder  = 'Digite a cidade de destino (volta)...';
+    document.getElementById('amadeusDestino').placeholder = 'Digite a cidade de origem (volta)...';
     document.getElementById('labelTrecho').innerHTML = 'Buscando preferência para o <strong>voo de volta</strong>.';
   }
   // Limpa IATA e resultados ao trocar de trecho

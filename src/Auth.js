@@ -126,7 +126,7 @@ function loginUsuario(email, senha) {
   const token = Utilities.getUuid();
   CacheService.getScriptCache().put(
     'sess_' + token,
-    JSON.stringify({ cpf: _normCpf(usuario.cpf), email: emailLimpo, nome: usuario.nome || '', trocarSenha: trocarSenha }),
+    JSON.stringify({ cpf: _normCpf(usuario.cpf), email: emailLimpo, nome: usuario.nome || '', telefone: usuario.telefone || '', trocarSenha: trocarSenha }),
     8 * 60 * 60  // 8 horas
   );
 
@@ -444,10 +444,11 @@ function _atualizarCondicoesEspeciais(cpf, opts) {
   const idxMat = hdr.indexOf('matricula');
 
   let rowIdx = -1;
+  const normCpf = String(cpf).replace(/\D/g,'').padStart(11,'0');
   for (let i = 1; i < dados.length; i++) {
-    const cpfV = String(dados[i][idxCPF] || '').replace(/\D/g, '');
-    const matV = String(dados[i][idxMat] || '').replace(/\D/g, '');
-    if (cpfV === cpf || matV === cpf) { rowIdx = i + 1; break; }
+    const cpfV = String(dados[i][idxCPF] || '').replace(/\D/g,'').padStart(11,'0');
+    const matV = String(dados[i][idxMat] || '').replace(/\D/g,'').padStart(11,'0');
+    if (cpfV === normCpf || matV === normCpf) { rowIdx = i + 1; break; }
   }
   if (rowIdx < 0) return; // viajante ainda não está no cache — será gravado no próximo acesso
 

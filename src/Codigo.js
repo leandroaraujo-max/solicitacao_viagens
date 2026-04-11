@@ -63,8 +63,9 @@ function doGet(e) {
     tmpl.sessionCpf   = sessao.cpf   || '';
     tmpl.sessionNome  = sessao.nome  || '';
     tmpl.sessionEmail = sessao.email || '';
-    tmpl.sessionToken = params.sessionToken || '';
-    tmpl.webAppUrl    = getConfig().WEBAPP_URL || '';
+    tmpl.sessionToken    = params.sessionToken || '';
+    tmpl.sessionTelefone = sessao.telefone || '';
+    tmpl.webAppUrl       = getConfig().WEBAPP_URL || '';
     return tmpl.evaluate()
       .setTitle('Portal de Viagens — Magalu')
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
