@@ -145,13 +145,7 @@ function enviarEmailPreAprovacaoSetor(reqID, req) {
   if (!email) { Logger.log(`[AVISO] Sem DL_VIAGENS/EMAIL_VIAGENS para pré-aprovação de ${reqID}`); return; }
 
   // Enriquece com dados completos do viajante (centro_custo, telefone, etc.)
-  let viajante = {};
-  try { viajante = buscarViajante(req.cpf_viajante || req.matricula_viajante || ''); } catch(_) {}
-  // Complementa com dados da aba Usuarios
-  try {
-    const u = carregarPerfilUsuario(req.cpf_viajante || req.matricula_viajante || '');
-    if (u) Object.assign(viajante, u);
-  } catch(_) {}
+  const viajante = _enriquecerViajante(req.cpf_viajante || req.matricula_viajante || '');
 
   const tokens  = gerarTokensPreAprovacao(reqID, email);
   const dataIda   = req.data_ida   ? Utilities.formatDate(new Date(req.data_ida),   'America/Sao_Paulo', 'dd/MM/yyyy') : '&#8212;';
@@ -230,9 +224,7 @@ function enviarEmailAprovacaoSetor(reqID, req) {
 
   const tokens = gerarTokensSetor(reqID, email);
   const tabelaCotacao = montarTabelaComparativa(req);
-  const viajante = buscarViajante(req.cpf_viajante) || {};
-  const perfil   = carregarPerfilUsuario(String(req.cpf_viajante || '').replace(/\D/g,'').padStart(11,'0')) || {};
-  Object.keys(perfil).forEach(k => { if (!viajante[k]) viajante[k] = perfil[k]; });
+  const viajante = _enriquecerViajante(req.cpf_viajante || req.matricula_viajante || '');
 
   const dataIda   = req.data_ida   ? Utilities.formatDate(new Date(req.data_ida),   'America/Sao_Paulo', 'dd/MM/yyyy') : '&#8212;';
   const dataVolta = req.data_volta ? Utilities.formatDate(new Date(req.data_volta), 'America/Sao_Paulo', 'dd/MM/yyyy') : '&#8212;';
@@ -713,6 +705,26 @@ function enviarLembreteAprovacao(req, etapa) {
 }
 
 // ── Helpers ──────────────────────────────────────────────────
+
+/**
+ * Busca dados completos do viajante: BQ cache (Viajantes) + cadastro (Usuarios).
+ * Garante telefone, RG e data_nascimento mesmo se BQ não tiver.
+ */
+function _enriquecerViajante(cpfOuMatricula) {
+  let viajante = {};
+  try { viajante = buscarViajante(cpfOuMatricula) || {}; } catch(_) {}
+  try {
+    const perfil = carregarPerfilUsuario(String(cpfOuMatricula || '').replace(/\D/g,'').padStart(11,'0'));
+    if (perfil) {
+      // Sobrescreve campos vazios do BQ com dados do cadastro
+      Object.keys(perfil).forEach(k => {
+        if (perfil[k] && !viajante[k]) viajante[k] = perfil[k];
+      });
+    }
+  } catch(_) {}
+  return viajante;
+}
+
 function montarTabelaComparativa(req) {
   const linhas = [
     ['Companhia / Hotel', req.cotacao_tastur_aero_cia  || req.cotacao_tastur_hotel_nome  || '-',
