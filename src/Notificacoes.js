@@ -634,7 +634,7 @@ function enviarLembreteCotacao(req) {
   const cfg = getConfig();
   ['EMAIL_TASTUR', 'EMAIL_KONTRIP'].forEach(key => {
     const email = props().getProperty(key);
-    if (email) GmailApp.sendEmail(email, `[Lembrete] Cotacao pendente - ${req.req_id}`, '',,
+    if (email) GmailApp.sendEmail(email, `[Lembrete] Cotacao pendente - ${req.req_id}`, '',
       { htmlBody: `<p>O prazo para o protocolo <b>${req.req_id}</b> está se aproximando.</p>`,
         name: 'Sistema de Viagens Magalu', replyTo: cfg.EMAIL_VIAGENS });
   });
@@ -643,7 +643,7 @@ function enviarLembreteCotacao(req) {
 function enviarLembreteAprovacao(req, etapa) {
   const email = etapa === 'N1' ? req.aprovador_n1_email : req.aprovador_n2_email;
   if (!email) return;
-  GmailApp.sendEmail(email, `[Lembrete] Aprovacao pendente - ${req.req_id}`, '',,
+  GmailApp.sendEmail(email, `[Lembrete] Aprovacao pendente - ${req.req_id}`, '',
     { htmlBody: `<p>A solicitação <b>${req.req_id}</b> de <b>${req.nome_viajante}</b> aguarda sua aprovação.</p>`,
       name: 'Sistema de Viagens Magalu' });
 }
