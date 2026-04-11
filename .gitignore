@@ -4,6 +4,9 @@
 secrets.json
 service-account.json
 credentials.json
+.secrets/
+google-sa.json
+.mcp-config.json
 
 # PDFs dos artefatos de discovery (binários pesados — usar Git LFS se necessário)
 *.pdf

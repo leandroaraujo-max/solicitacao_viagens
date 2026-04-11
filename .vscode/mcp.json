@@ -1,0 +1,11 @@
+{
+  "servers": {
+    "viagens-magalu": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${workspaceFolder}/mcp/server.js"],
+      "env": {},
+      "description": "MCP local — Google Sheets, Drive e GAS para o projeto de viagens"
+    }
+  }
+}
