@@ -470,6 +470,55 @@ function setBtn(id, loading, texto) {
   b.innerHTML = loading ? '<span class="btn-spin">⏳</span> Aguarde...' : texto;
 }
 
+// ── Loader global para chamadas ao servidor ───────────────────
+let _loaderAtivo = 0;
+let _loaderTimer = null;
+
+function _mostrarLoader(msg) {
+  _loaderAtivo++;
+  var barra = document.getElementById('barra-loading');
+  var toast = document.getElementById('toast-loading');
+  if (barra) barra.classList.add('ativo');
+  if (toast) {
+    document.getElementById('toast-msg').textContent = msg || 'Aguardando servidor...';
+    toast.style.display = 'flex';
+  }
+  clearTimeout(_loaderTimer);
+  _loaderTimer = setTimeout(function() {
+    if (_loaderAtivo > 0) {
+      var el = document.getElementById('toast-msg');
+      if (el) el.textContent = 'A consulta está demorando mais que o esperado...';
+    }
+  }, 12000);
+}
+
+function _ocultarLoader() {
+  _loaderAtivo = Math.max(0, _loaderAtivo - 1);
+  if (_loaderAtivo === 0) {
+    clearTimeout(_loaderTimer);
+    var barra = document.getElementById('barra-loading');
+    var toast = document.getElementById('toast-loading');
+    if (barra) barra.classList.remove('ativo');
+    if (toast) toast.style.display = 'none';
+  }
+}
+
+function runServer(payload, onSuccess, onError, opts) {
+  var msg = (opts && opts.msgLoader) ? opts.msgLoader : null;
+  _mostrarLoader(msg);
+  google.script.run
+    .withSuccessHandler(function(r) {
+      _ocultarLoader();
+      try { onSuccess(r); } catch(ex) { console.error('[runServer]', ex); }
+    })
+    .withFailureHandler(function(err) {
+      _ocultarLoader();
+      if (onError) { try { onError(err); } catch(_e) {} }
+      else console.error('[runServer failure]', payload.acao, err);
+    })
+    .doPost_proxy(payload);
+}
+
 // ── Init: auto-identificação via sessão ──────────────────────
 document.addEventListener('DOMContentLoaded', function() {
   // Exibe nome do usuário no header
