@@ -125,6 +125,9 @@ function doPost_proxy(payload) {
     submeterCotacaoAgencia:      () => submeterCotacaoAgencia(payload),
     uploadVoucher:               () => uploadVoucher(payload),
     aprovarExcecaoRH:            () => aprovarExcecaoRH(payload),
+    // L1-B: casamento de viagens
+    vincularSolicitacoes:        () => vincularSolicitacoes(payload.reqID1, payload.reqID2, payload.operadorEmail),
+    ignorarMatch:                () => ignorarMatch(payload.reqID1, payload.reqID2, payload.operadorEmail, payload.motivo),
     carregarSolicitacaoAgencia:  () => carregarSolicitacaoAgencia(payload.reqID, payload.agencia),
     calcularDistancia:           () => calcularDistanciaKm(payload.origem, payload.destino),
     // Duffel (busca consultiva de preferências)

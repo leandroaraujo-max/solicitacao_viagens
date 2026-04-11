@@ -154,6 +154,13 @@ function submeterSolicitacao(payload) {
   // 9. Dispara e-mail de aprovação para a liderança direta
   enviarEmailAprovacaoLideranca(reqID, viajante, payload, classificacao, cadeia);
 
+  // 10. L1-B: Verifica casamento com outras solicitações compatíveis (após gravação)
+  try {
+    verificarCasamento(reqID);
+  } catch (errMatch) {
+    Logger.log('[submeterSolicitacao] verificarCasamento falhou (não crítico): ' + errMatch.message);
+  }
+
   return { reqID, status: 'Pendente Aprovação Liderança', classificacao, antecedenciaDias };
 }
 

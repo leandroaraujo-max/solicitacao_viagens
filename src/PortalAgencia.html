@@ -661,8 +661,42 @@ function enviarCotacao() {
   const secaoRodov = document.getElementById('secaoRodov');
   if (!secaoRodov || secaoRodov.classList.contains('hidden'))                   delete payload.rodoviario;
 
-  setBtn('btnEnviarCotacao', true, '📤 Enviar Cotação');
+  // L1-A: Dissociação de modalidades — valida apenas os serviços presentes na solicitação
+  const erros = [];
+  if (payload.aereo) {
+    if (!payload.aereo.cia)     erros.push('Companhia aérea é obrigatória.');
+    if (!payload.aereo.voo)     erros.push('Número do voo é obrigatório.');
+    if (!payload.aereo.saida)   erros.push('Horário de saída do voo é obrigatório.');
+    if (!payload.aereo.chegada) erros.push('Horário de chegada do voo é obrigatório.');
+    if (!payload.aereo.origem)  erros.push('Aeroporto de origem (IATA) é obrigatório.');
+    if (!payload.aereo.destino) erros.push('Aeroporto de destino (IATA) é obrigatório.');
+    if (!payload.aereo.valor || isNaN(payload.aereo.valor)) erros.push('Valor do voo é obrigatório.');
+    if (!payload.aereo.validade) erros.push('Validade da cotação aérea é obrigatória.');
+  }
+  if (payload.hospedagem) {
+    if (!payload.hospedagem.nome)    erros.push('Nome do hotel é obrigatório.');
+    if (!payload.hospedagem.checkin) erros.push('Check-in do hotel é obrigatório.');
+    if (!payload.hospedagem.checkout) erros.push('Check-out do hotel é obrigatório.');
+    if (!payload.hospedagem.diaria || isNaN(payload.hospedagem.diaria)) erros.push('Valor da diária é obrigatório.');
+  }
+  if (payload.carro) {
+    if (!payload.carro.locadora)  erros.push('Locadora é obrigatória.');
+    if (!payload.carro.retirada)  erros.push('Data/hora de retirada do carro é obrigatória.');
+    if (!payload.carro.devolucao) erros.push('Data/hora de devolução do carro é obrigatória.');
+    if (!payload.carro.valor || isNaN(payload.carro.valor)) erros.push('Valor do carro é obrigatório.');
+  }
+  if (payload.rodoviario) {
+    if (!payload.rodoviario.empresa) erros.push('Empresa de ônibus é obrigatória.');
+    if (!payload.rodoviario.partida) erros.push('Data/hora de partida do ônibus é obrigatória.');
+    if (!payload.rodoviario.chegada) erros.push('Data/hora de chegada estimada é obrigatória.');
+    if (!payload.rodoviario.valor || isNaN(payload.rodoviario.valor)) erros.push('Valor da passagem é obrigatório.');
+  }
+  if (erros.length) {
+    mostrarAlerta('Corrija os campos antes de enviar:\n• ' + erros.join('\n• '), 'erro');
+    return;
+  }
 
+  setBtn('btnEnviarCotacao', true, '📤 Enviar Cotação');
   google.script.run
     .withSuccessHandler(r => {
       if (!r.sucesso) {

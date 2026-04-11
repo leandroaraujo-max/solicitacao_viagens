@@ -229,6 +229,14 @@ function dispararEmailAgencias(reqID, viajante, solicitacao, classificacao) {
       ? `<tr><td style="padding:8px;color:#666">Observações:</td><td style="padding:8px">${solicitacao.observacoes_viajante}</td></tr>` : '';
     const rodovRow = (solicitacao.tipo_servico || '').includes('Rodoviario') && solicitacao.rodov_tipo_onibus
       ? `<tr style="background:#f5f5f5"><td style="padding:8px;color:#666">Ônibus (rodov.):</td><td style="padding:8px">${solicitacao.rodov_tipo_onibus}</td></tr>` : '';
+    // L1-C: período preferido aero e rodoviário
+    const periodoAereoRow = solicitacao.aereo_periodo_preferido
+      ? `<tr><td style="padding:8px;color:#666">Período preferido (✈):</td><td style="padding:8px">${solicitacao.aereo_periodo_preferido}</td></tr>` : '';
+    const periodoRodovRow = solicitacao.rodov_periodo_preferido
+      ? `<tr style="background:#f5f5f5"><td style="padding:8px;color:#666">Período preferido (🚌):</td><td style="padding:8px">${solicitacao.rodov_periodo_preferido}</td></tr>` : '';
+    // L1-C: assento especial
+    const assentoRow = solicitacao.assento_especial
+      ? `<tr><td style="padding:8px;color:#666">💺 Assento especial:</td><td style="padding:8px"><strong>${solicitacao.assento_especial}</strong>${solicitacao.motivo_assento_especial ? ' — ' + solicitacao.motivo_assento_especial : ''}</td></tr>` : '';
     const bagRow = solicitacao.bagagem_extra
       ? `<tr><td style="padding:8px;color:#666">Bagagem extra:</td><td style="padding:8px">🧳 Sim — despachar bagagem</td></tr>` : '';
 
@@ -296,8 +304,11 @@ function dispararEmailAgencias(reqID, viajante, solicitacao, classificacao) {
                 <td style="padding:8px">${solicitacao.motivo_viagem || '—'}</td></tr>
             ${obsRow}
             ${rodovRow}
+            ${periodoAereoRow}
+            ${periodoRodovRow}
+            ${assentoRow}
             ${bagRow}
-            <tr${obsRow||rodovRow||bagRow?'':' style="background:#f5f5f5"'}><td style="padding:8px;color:#666">Hospedagem:</td>
+            <tr${obsRow||rodovRow||bagRow||assentoRow?'':' style="background:#f5f5f5"'}><td style="padding:8px;color:#666">Hospedagem:</td>
                 <td style="padding:8px;font-weight:600">${viajante.categoria_hospedagem}${viajante.motivo_categoria_hosp ? ' (' + viajante.motivo_categoria_hosp + ')' : ''}</td></tr>
           </table>
           ${blocoPreferencia}
@@ -480,11 +491,70 @@ function notificarAgenciaPerdedora(req, agenciaVencedora) {
 
 function notificarSetorMatchEncontrado(req, candidato, tipo) {
   const cfg = getConfig();
+  // L1-C: e-mail de match enriquecido com dados de ambas as solicitações
+  const tipoLabel = {
+    TOTAL:    '🏨 Quarto compartilhado + 🚗 Mesmo veículo',
+    PARCIAL_A:'🏨 Quarto compartilhado | 🚗 Veículos separados',
+    PARCIAL_B:'🏨 Quartos separados   | 🚗 Mesmo veículo',
+  }[tipo] || tipo;
+
+  const fmtData = (d) => {
+    if (!d) return '—';
+    try { return Utilities.formatDate(new Date(d), 'America/Sao_Paulo', 'dd/MM/yyyy'); } catch(e) { return d; }
+  };
+
+  const html = `
+    <div style="font-family:sans-serif;max-width:640px;margin:auto">
+      <div style="background:#5c6bc0;padding:20px;border-radius:8px 8px 0 0">
+        <h2 style="color:#fff;margin:0">🔔 Viagem Similar Identificada</h2>
+        <p style="color:#e8eaf6;margin:4px 0 0">Tipo de compatibilidade: <strong>${tipoLabel}</strong></p>
+      </div>
+      <div style="background:#fff;padding:24px;border:1px solid #e0e0e0;border-top:none">
+        <p>Dois colaboradores planejam viagens compatíveis. Vincule para emitir um briefing unificado às agências.</p>
+
+        <table style="width:100%;border-collapse:collapse;margin:16px 0">
+          <thead>
+            <tr style="background:#ede7f6">
+              <th style="padding:8px;text-align:left">Campo</th>
+              <th style="padding:8px;text-align:left;color:#5c6bc0">${req.req_id}</th>
+              <th style="padding:8px;text-align:left;color:#1565c0">${candidato.req_id}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td style="padding:8px;color:#666">Viajante</td>
+                <td style="padding:8px;font-weight:600">${req.nome_viajante || req.req_id}</td>
+                <td style="padding:8px;font-weight:600">${candidato.nome_viajante || candidato.req_id}</td></tr>
+            <tr style="background:#f5f5f5"><td style="padding:8px;color:#666">Centro de Custo</td>
+                <td style="padding:8px">${req.centro_custo || '—'}</td>
+                <td style="padding:8px">${candidato.centro_custo || '—'}</td></tr>
+            <tr><td style="padding:8px;color:#666">Destino</td>
+                <td style="padding:8px;font-weight:600">${req.destino_cidade || '—'}</td>
+                <td style="padding:8px;font-weight:600">${candidato.destino_cidade || '—'}</td></tr>
+            <tr style="background:#f5f5f5"><td style="padding:8px;color:#666">Período</td>
+                <td style="padding:8px">${fmtData(req.data_ida)} → ${fmtData(req.data_volta)}</td>
+                <td style="padding:8px">${fmtData(candidato.data_ida)} → ${fmtData(candidato.data_volta)}</td></tr>
+            <tr><td style="padding:8px;color:#666">Serviços</td>
+                <td style="padding:8px">${req.tipo_servico || '—'}</td>
+                <td style="padding:8px">${candidato.tipo_servico || '—'}</td></tr>
+            <tr style="background:#f5f5f5"><td style="padding:8px;color:#666">Quarto</td>
+                <td style="padding:8px">${req.quarto_tipo_solicitado || '—'}</td>
+                <td style="padding:8px">${candidato.quarto_tipo_solicitado || '—'}</td></tr>
+          </tbody>
+        </table>
+
+        <div style="text-align:center;margin:24px 0;display:flex;gap:12px;justify-content:center">
+          <a href="${cfg.WEBAPP_URL}" style="background:#5c6bc0;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold">
+            🔗 Ver no painel e vincular
+          </a>
+        </div>
+        <p style="color:#999;font-size:11px">IDs: ${req.req_id} | ${candidato.req_id}</p>
+        ${rodapeEmail(cfg)}
+      </div>
+    </div>`;
+
   GmailApp.sendEmail(cfg.EMAIL_VIAGENS,
-    `🔔 [Viagens] Match identificado — ${req.req_id} / ${candidato.req_id}`, '', {
-      htmlBody: `<p><b>Viagem similar:</b> ${req.req_id} — ${req.nome_viajante} | ${candidato.req_id} — ${candidato.nome_viajante}<br>
-        Destino: <b>${req.destino_cidade}</b> | ${req.data_ida} → ${req.data_volta}<br>
-        Tipo: <b>${tipo}</b></p>`, name: 'Sistema de Viagens Magalu' });
+    `🔔 [Viagens] Match ${tipo} — ${req.req_id} / ${candidato.req_id} | Destino: ${req.destino_cidade}`, '', {
+      htmlBody: html, name: 'Sistema de Viagens Magalu' });
 }
 
 function notificarSetorAprovacaoManual(req) {
