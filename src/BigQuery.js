@@ -40,10 +40,14 @@ function buscarViajanteCache(chave) {
   const idxMat = header.indexOf('matricula');
   const idxCPF = header.indexOf('cpf');
 
+  // Normaliza a chave buscada para 11 dígitos (mesma lógica de _normCpf em Auth.js)
+  // Sheets converte strings numéricas em número ao salvar, perdendo zeros iniciais.
+  const normChave = String(chave).replace(/\D/g,'').padStart(11,'0');
+
   for (let i = 1; i < dados.length; i++) {
-    const matV = String(dados[i][idxMat] || '').replace(/\D/g,'');
-    const cpfV = String(idxCPF >= 0 ? dados[i][idxCPF] || '' : '').replace(/\D/g,'');
-    if (matV === chave || cpfV === chave) {
+    const matV  = String(dados[i][idxMat] || '').replace(/\D/g,'').padStart(11,'0');
+    const cpfV  = String(idxCPF >= 0 ? dados[i][idxCPF] || '' : '').replace(/\D/g,'').padStart(11,'0');
+    if (matV === normChave || cpfV === normChave) {
       return linhaParaObjeto(header, dados[i]);
     }
   }
@@ -62,9 +66,12 @@ function consultarColaboradorBQ(cpfOuMatricula) {
 
   // C1: detecta se é CPF (11 dígitos) ou matrícula (outros comprimentos)
   const eCPF   = /^\d{11}$/.test(cpfOuMatricula);
+  // Aceita CPF com ou sem zero inicial (Sheets pode ter gravado como número)
   const filtro = eCPF
-    ? `t1.custom2 = '${cpfOuMatricula}'`
+    ? `(t1.custom2 = '${cpfOuMatricula}' OR t1.custom2 = '${cpfOuMatricula.replace(/^0+/,'')}' OR LPAD(t1.custom2,11,'0') = '${cpfOuMatricula}')`
     : `t1.CUSTOM1 = '${cpfOuMatricula}'`;
+
+  Logger.log(`[BQ] consultarColaboradorBQ: chave=${cpfOuMatricula} eCPF=${eCPF}`);
 
   const query = `
     SELECT DISTINCT
@@ -109,7 +116,10 @@ function consultarColaboradorBQ(cpfOuMatricula) {
     const request  = { query, useLegacySql: false, timeoutMs: 8000 };
     const response = BigQuery.Jobs.query(request, cfg.BQ_PROJECT_ID);
 
-    if (!response.rows || response.rows.length === 0) return null;
+    if (!response.rows || response.rows.length === 0) {
+      Logger.log(`[BQ] consultarColaboradorBQ: nenhum resultado para ${cpfOuMatricula}`);
+      return null;
+    }
 
     const schema = response.schema.fields.map(f => f.name);
     const row    = response.rows[0].f.map(c => c.v);

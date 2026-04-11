@@ -41,19 +41,25 @@
           Para mim mesmo
         </label>
         <label class="radio-opt">
-          <input type="radio" name="tipo_solicitacao" value="delegado" onchange="onTipoSolicitacao(this)">
-          Em nome de outro colaborador
-        </label>
-      </div>
-    </div>
-
-    <div class="field-group">
-      <label for="cpfOperador">Seu CPF <span class="req">*</span></label>
+            <input type="radio" name="tipo_solicitacao" value="conjunto" onchange="onTipoSolicitacao(this)">
+            Em conjunto com outro colaborador
+          </label>
+          <label class="radio-opt">
       <div class="input-row">
         <input type="text" id="cpfOperador" placeholder="000.000.000-00" maxlength="14" oninput="mascaraCPF(this)" />
         <button class="btn-secondary" id="btnIdentificar" onclick="buscarOperador()">Identificar</button>
       </div>
       <div id="infoOperador" class="info-box hidden"></div>
+    </div>
+
+    <!-- C2: Colega de viagem conjunta (somente quando tipo = conjunto) -->
+    <div id="secaoColega" class="field-group hidden">
+      <label for="cpfColega">CPF do colega de viagem <span class="req">*</span></label>
+      <div class="input-row">
+        <input type="text" id="cpfColega" placeholder="CPF do colega" maxlength="14" oninput="mascaraCPF(this)" />
+        <button class="btn-secondary" id="btnBuscarColega" onclick="buscarColegas()">Verificar</button>
+      </div>
+      <div id="infoColegaStep1" class="info-box hidden"></div>
     </div>
 
     <div id="secaoViajante" class="field-group hidden">
@@ -415,6 +421,8 @@ const estado = {
   operador: null,
   viajante: null,
   ehDelegacao: false,
+  ehConjunto: false,
+  parceiro: null,
   laudoBase64: null,
   laudoNome: null,
   preferencia_voo_ida:   null,
@@ -540,6 +548,10 @@ function fazerLogout() {
 // ── Navegação ────────────────────────────────────────────────
 function onTipoSolicitacao(radio) {
   estado.ehDelegacao = radio.value === 'delegado';
+  estado.ehConjunto  = radio.value === 'conjunto';
+  // Reseta parceiro ao trocar tipo
+  if (!estado.ehConjunto) { estado.parceiro = null; document.getElementById('infoColegaStep1').classList.add('hidden'); }
+  document.getElementById('secaoColega').classList.toggle('hidden',  !estado.ehConjunto);
   document.getElementById('secaoViajante').classList.toggle('hidden', !estado.ehDelegacao);
   checarPodeAvancar();
 }
@@ -628,7 +640,44 @@ function onViajanteEncontrado(viajante, delegacao) {
   checarPodeAvancar();
 }
 
+}
+
+// C2: busca colega no Passo 1 (tipo = conjunto)
+function buscarColegas() {
+  const cpfColega = soCpf(document.getElementById('cpfColega').value);
+  const cpfVia    = soCpf(document.getElementById('cpfOperador').value);
+  if (cpfColega.length !== 11) return alertar('Informe o CPF completo do colega (11 dígitos).');
+  if (cpfColega === cpfVia)    return alertar('O CPF do colega não pode ser igual ao seu.');
+  setBtn('btnBuscarColega', true, 'Verificar');
+  google.script.run
+    .withSuccessHandler(r => {
+      setBtn('btnBuscarColega', false, 'Verificar');
+      const el = document.getElementById('infoColegaStep1');
+      if (!r || !r.sucesso) {
+        el.innerHTML = `<span style="color:#c62828">${(r && r.erro) || 'Colega não encontrado.'}</span>`;
+        el.classList.remove('hidden');
+        estado.parceiro = null;
+        checarPodeAvancar();
+        return;
+      }
+      const v = r.dados;
+      estado.parceiro = v;
+      el.innerHTML = `<strong>${v.nome}</strong> | ${v.cargo} | ${v.filial}`;
+      el.className = 'info-box';
+      el.classList.remove('hidden');
+      checarPodeAvancar();
+    })
+    .withFailureHandler(e => {
+      setBtn('btnBuscarColega', false, 'Verificar');
+      setErro('infoColegaStep1', e.message || 'Erro de comunicação.');
+      estado.parceiro = null;
+      checarPodeAvancar();
+    })
+    .doPost_proxy({ acao: 'buscarViajante', cpf: cpfColega });
+}
+
 function buscarColega() {
+  // Compatibilidade de colegas na seção de dados da viagem (passo 2)
   const cpfColega = soCpf(document.getElementById('matriculaColega').value);
   const cpfVia = soCpf(document.getElementById('cpfViajante')?.value || document.getElementById('cpfOperador').value);
   if (cpfColega.length !== 11) return;
@@ -840,6 +889,10 @@ function submeterSolicitacao() {
     matricula_operador:      estado.operador?.matricula || estado.viajante.matricula || '',
     nome_operador:           estado.operador?.nome      || estado.viajante.nome,
     via_delegacao:           estado.ehDelegacao,
+    // C2: solicitação conjunta — parceiro declarado no passo 1
+    via_conjunto:            estado.ehConjunto,
+    parceiro_cpf:            estado.ehConjunto && estado.parceiro ? soCpf(estado.parceiro.cpf || '') : '',
+    parceiro_nome:           estado.ehConjunto && estado.parceiro ? (estado.parceiro.nome || '') : '',
     // A1 — origem
     origem_cidade:           document.getElementById('origemCidade').value.trim(),
     origem_estado:           document.getElementById('origemEstado').value.trim().toUpperCase(),
@@ -1118,7 +1171,11 @@ function limparHotel() {
 
 // ── Guardas UI ────────────────────────────────────────────────
 function checarPodeAvancar() {
-  const ok = estado.operador && (estado.ehDelegacao ? !!estado.viajante : true);
+  // Conjunto: só avança se o operador E o parceiro foram identificados
+  const ok = estado.operador &&
+    (estado.ehDelegacao ? !!estado.viajante
+   : estado.ehConjunto  ? !!estado.parceiro
+   : true);
   document.getElementById('btnAvancarViagem').disabled = !ok;
 }
 
