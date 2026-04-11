@@ -155,8 +155,9 @@ function criarOuAtualizarViajante(dadosBQ) {
   let sheet = ss.getSheetByName('Viajantes');
   if (!sheet) {
     sheet = ss.insertSheet('Viajantes');
+    // B3-fix: header em sincronia com inicializarPlanilha — inclui 'cpf' após 'matricula'
     sheet.appendRow([
-      'matricula','nome','cargo','cod_categoria','filial','centro_custo',
+      'matricula','cpf','nome','cargo','cod_categoria','filial','centro_custo',
       'cod_centro_custo','empresa','email','user_name',
       'aprovador_n1_email','aprovador_n1_nome','aprovador_n2_email','aprovador_n2_nome',
       'sono_disturbio','sono_cid','sono_laudo_link','sono_validade','sono_obs',
@@ -165,6 +166,7 @@ function criarOuAtualizarViajante(dadosBQ) {
       'categoria_hospedagem','categoria_veiculo',
       'motivo_categoria_hosp','motivo_categoria_veic','atualizado_em'
     ]);
+    sheet.setFrozenRows(1);
   }
 
   // Regra R1: cargo de alto nível → hospedagem individual desde o início

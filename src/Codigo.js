@@ -47,7 +47,18 @@ function doGet(e) {
       return renderPaginaConfirmacao(params.acao);
     }
 
-    // Portal principal do Viajante (default)
+    // ── Portão de autenticação — Portal principal do Viajante ─────────────
+    // Valida o sessionToken recebido como parâmetro de URL.
+    // Se inválido ou ausente, renderiza Login.html.
+    const sessao = validarSessao(params.sessionToken || '');
+    if (!sessao) {
+      const tmpl = HtmlService.createTemplateFromFile('Login');
+      tmpl.webAppUrl = getConfig().WEBAPP_URL || '';
+      return tmpl.evaluate()
+        .setTitle('Login — Viagens Magalu')
+        .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+    }
+
     return HtmlService
       .createTemplateFromFile('Index')
       .evaluate()
@@ -117,6 +128,12 @@ function doPost_proxy(payload) {
     buscarLocaisAmadeus:   () => buscarLocaisAmadeus(payload.termo),
     buscarVoosAmadeus:     () => buscarVoosAmadeus(payload.origem, payload.destino, payload.dataIda, payload.dataVolta || null, payload.adultos),
     buscarHoteisAmadeus:   () => buscarHoteisAmadeus(payload.cityCode, payload.checkin, payload.checkout, payload.adultos),
+    // Auth
+    cadastrarUsuario:      () => cadastrarUsuario(payload.cpf, payload.telefone, payload.rg, payload.dataNascimento),
+    loginUsuario:          () => loginUsuario(payload.email, payload.senha),
+    validarSessao:         () => validarSessao(payload.token),
+    logoutUsuario:         () => { logoutUsuario(payload.token); return { ok: true }; },
+    redefinirSenha:        () => redefinirSenha(payload.email),
   };
 
   try {
@@ -307,6 +324,10 @@ function inicializarPlanilha() {
       'matricula_operador', 'matricula_viajante', 'status', 'validade_ate',
       'autorizado_por', 'criado_em', 'obs',
     ],
+    'Usuarios': [
+      'cpf', 'email', 'nome', 'senha_hash', 'senha_salt',
+      'telefone', 'rg', 'data_nascimento', 'status', 'criado_em', 'ultimo_acesso',
+    ],
   };
 
   Object.entries(abas).forEach(([nome, header]) => {
@@ -318,19 +339,119 @@ function inicializarPlanilha() {
     }
   });
 
-  // Migração: garante que a coluna 'email' exista na aba Solicitacoes
-  const abaSOL = ss.getSheetByName('Solicitacoes');
-  if (abaSOL) {
-    const hdrAtual = abaSOL.getRange(1, 1, 1, abaSOL.getLastColumn()).getValues()[0];
-    if (!hdrAtual.includes('email')) {
-      const idxVeic = hdrAtual.indexOf('veiculo_tipo_solicitado');
-      if (idxVeic >= 0) {
-        abaSOL.insertColumnAfter(idxVeic + 1); // 1-indexed
-        abaSOL.getRange(1, idxVeic + 2).setValue('email');
-        Logger.log('[INIT] Coluna email adicionada em Solicitacoes após veiculo_tipo_solicitado');
-      }
-    }
+  // B1 — Migração Viajantes: insere coluna 'cpf' e corrige linhas desalinhadas pelo bug v2
+  migrarViajantesParaV2(ss, abas['Viajantes']);
+
+  // B2 — Migração Solicitacoes: reconstrói header v2 e corrige linhas desalinhadas pelo bug v2
+  migrarSolicitacoesParaV2(ss, abas['Solicitacoes']);
+}
+
+/**
+ * Detecta se um valor da planilha parece ser um CPF (11 dígitos numéricos,
+ * possivelmente em notação exponencial como "8.68E9" quando gravado como número).
+ */
+function _ehValorCPF(valor) {
+  const s = String(valor == null ? '' : valor).trim();
+  if (!s || s === 'false' || s === 'true') return false;
+  // String de 11 dígitos sem formatação
+  if (/^\d{11}$/.test(s)) return true;
+  // Número em notação exponencial com 10-11 algarismos significativos
+  if (/^[\d.]+[eE]\+?\d+$/.test(s)) {
+    try {
+      const inteiro = Math.round(parseFloat(s)).toString().replace(/\D/g, '');
+      if (inteiro.length >= 10 && inteiro.length <= 11) return true;
+    } catch (_) { /* ignora */ }
   }
+  return false;
+}
+
+/**
+ * B1 — Migra a aba Viajantes para o schema v2 (inclui coluna 'cpf').
+ * Detecta linhas escritas com o bug v2 (CPF na coluna 'nome') e corrige o posicionamento.
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} ss
+ * @param {string[]} hdrV2 - header canônico v2 de inicializarPlanilha
+ */
+function migrarViajantesParaV2(ss, hdrV2) {
+  const aba = ss.getSheetByName('Viajantes');
+  if (!aba) return;
+  const dados = aba.getDataRange().getValues();
+  const hdrAtual = dados[0].map(String);
+  if (hdrAtual.includes('cpf')) return; // já migrado
+
+  Logger.log('[MIGR] Iniciando migração Viajantes → v2');
+  const novasLinhas = [];
+  for (let i = 1; i < dados.length; i++) {
+    const row = dados[i];
+    const novaLinha = new Array(hdrV2.length).fill('');
+    const valorNome = row[hdrAtual.indexOf('nome')];
+    if (_ehValorCPF(valorNome)) {
+      // Linha escrita pelo código v2 contra header v1 — dados já estão em ordem v2.
+      // Basta copiar posicionalmente (nova[j] → col[j]).
+      for (let j = 0; j < hdrV2.length; j++) {
+        novaLinha[j] = j < row.length ? row[j] : '';
+      }
+    } else {
+      // Linha v1 — mapeia por nome de coluna
+      hdrV2.forEach((col, j) => {
+        const idx = hdrAtual.indexOf(col);
+        novaLinha[j] = idx >= 0 ? row[idx] : '';
+      });
+    }
+    novasLinhas.push(novaLinha);
+  }
+
+  aba.clearContents();
+  aba.getRange(1, 1, 1, hdrV2.length).setValues([hdrV2]);
+  if (novasLinhas.length > 0) {
+    aba.getRange(2, 1, novasLinhas.length, hdrV2.length).setValues(novasLinhas);
+  }
+  aba.setFrozenRows(1);
+  Logger.log('[MIGR] Viajantes migrada para v2 (' + hdrV2.length + ' colunas, ' + novasLinhas.length + ' linhas corrigidas).');
+}
+
+/**
+ * B2 — Migra a aba Solicitacoes para o schema v2 completo.
+ * Detecta linhas escritas com o bug v2 (CPF na coluna 'matricula_viajante')
+ * e corrige o posicionamento. Linhas v1 são mapeadas por nome de coluna.
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} ss
+ * @param {string[]} hdrV2 - header canônico v2 de inicializarPlanilha
+ */
+function migrarSolicitacoesParaV2(ss, hdrV2) {
+  const aba = ss.getSheetByName('Solicitacoes');
+  if (!aba) return;
+  const dados = aba.getDataRange().getValues();
+  const hdrAtual = dados[0].map(String);
+  if (hdrAtual.includes('cpf_viajante')) return; // já migrado
+
+  Logger.log('[MIGR] Iniciando migração Solicitacoes → v2');
+  const novasLinhas = [];
+  for (let i = 1; i < dados.length; i++) {
+    const row = dados[i];
+    const novaLinha = new Array(hdrV2.length).fill('');
+    // Nas linhas v2 gravadas com header v1, cpf_viajante foi para col[1] (matricula_viajante)
+    const valorPosicao1 = row[1];
+    if (_ehValorCPF(valorPosicao1)) {
+      // Linha escrita por código v2 — dados já em ordem v2, copiar posicionalmente
+      for (let j = 0; j < hdrV2.length; j++) {
+        novaLinha[j] = j < row.length ? row[j] : '';
+      }
+    } else {
+      // Linha v1 — mapeia por nome de coluna
+      hdrV2.forEach((col, j) => {
+        const idx = hdrAtual.indexOf(col);
+        novaLinha[j] = idx >= 0 ? row[idx] : '';
+      });
+    }
+    novasLinhas.push(novaLinha);
+  }
+
+  aba.clearContents();
+  aba.getRange(1, 1, 1, hdrV2.length).setValues([hdrV2]);
+  if (novasLinhas.length > 0) {
+    aba.getRange(2, 1, novasLinhas.length, hdrV2.length).setValues(novasLinhas);
+  }
+  aba.setFrozenRows(1);
+  Logger.log('[MIGR] Solicitacoes migrada para v2 (' + hdrV2.length + ' colunas, ' + novasLinhas.length + ' linhas corrigidas).');
 }
 
 // ════════════════════════════════════════════════════════════

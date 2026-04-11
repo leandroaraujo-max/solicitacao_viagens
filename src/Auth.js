@@ -1,0 +1,329 @@
+// ============================================================
+// Auth.gs — Cadastro, login e gestão de sessão
+// Autenticação via e-mail corporativo do grupo Magalu.
+// Senhas: SHA-256(senha + salt), geradas automaticamente e
+// enviadas por e-mail ao colaborador.
+// Sessão: token UUID → CacheService (TTL 8h).
+// ============================================================
+
+const DOMINIOS_MAGALU = [
+  'aiqfome.com', 'canaltech.com.br', 'coopluiza.com.br', 'epocacosmeticos.com.br',
+  'fintechmagalu.com.br', 'gflogistica.com.br', 'hubsales.com.br', 'jovemnerd.com.br',
+  'luizalabs.com', 'magalu.cloud', 'magalupay.com.br', 'magazineluiza.com.br',
+  'mtgparticipacoes.com.br', 'netshoes.com', 'netshoes.com.br', 'pjdagropastoril.com.br',
+  'sode.com.br', 'stealthelook.com.br',
+];
+
+// ── Cadastro ────────────────────────────────────────────────
+
+/**
+ * Registra um novo usuário no sistema.
+ * Fluxo: CPF → busca BQ/cache → valida domínio e-mail → garante Usuarios tab
+ *        → grava hash+salt → envia senha gerada ao e-mail corporativo.
+ * @param {string} cpf
+ * @param {string} [telefone]
+ * @param {string} [rg]
+ * @param {string} [dataNascimento]
+ * @returns {{ email: string, nome: string }}
+ */
+function cadastrarUsuario(cpf, telefone, rg, dataNascimento) {
+  const cpfLimpo = String(cpf || '').replace(/\D/g, '');
+  if (!cpfLimpo || cpfLimpo.length !== 11) throw new Error('CPF inválido. Informe os 11 dígitos sem pontuação.');
+
+  const viajante = buscarViajante(cpfLimpo);
+  if (!viajante || !viajante.email) throw new Error('Colaborador não encontrado ou sem e-mail corporativo cadastrado.');
+
+  const email = (viajante.email || '').toLowerCase().trim();
+  if (!_validarDominio(email)) {
+    throw new Error('O e-mail ' + email + ' não pertence ao grupo Magalu. Acesso não permitido.');
+  }
+
+  const sheetUsuarios = _getSheetUsuarios();
+  const existente = _buscarUsuarioPorCPF(sheetUsuarios, cpfLimpo);
+  if (existente && existente.status === 'ativo') {
+    throw new Error('CPF já cadastrado e ativo. Use a opção "Esqueci minha senha" ou faça login com seu e-mail corporativo.');
+  }
+
+  const salt  = _gerarSalt();
+  const senha = _gerarSenha();
+  const hash  = _hashSenha(senha, salt);
+  const agora = new Date();
+
+  if (existente) {
+    // Reativa conta existente (status inativo) com nova senha
+    _atualizarLinhaUsuario(sheetUsuarios, existente._rowIndex, {
+      senha_hash: hash, senha_salt: salt,
+      telefone: telefone || existente.telefone || '',
+      rg: rg || existente.rg || '',
+      data_nascimento: dataNascimento || existente.data_nascimento || '',
+      status: 'ativo',
+    });
+  } else {
+    sheetUsuarios.appendRow([
+      cpfLimpo,
+      email,
+      viajante.nome || '',
+      hash,
+      salt,
+      telefone || '',
+      rg || '',
+      dataNascimento || '',
+      'ativo',
+      agora,
+      '',
+    ]);
+  }
+
+  _enviarEmailSenha(email, viajante.nome || 'Colaborador', senha);
+  Logger.log('[AUTH] Usuário cadastrado: ' + email);
+  return { email: email, nome: viajante.nome || '' };
+}
+
+// ── Login ───────────────────────────────────────────────────
+
+/**
+ * Autentica o usuário e retorna um token de sessão (UUID, TTL 8h no CacheService).
+ * @param {string} email
+ * @param {string} senha
+ * @returns {{ token: string, nome: string, email: string }}
+ */
+function loginUsuario(email, senha) {
+  if (!email || !senha) throw new Error('E-mail e senha são obrigatórios.');
+  const emailLimpo = email.toLowerCase().trim();
+  if (!_validarDominio(emailLimpo)) throw new Error('E-mail não pertence ao grupo Magalu.');
+
+  const sheetUsuarios = _getSheetUsuarios();
+  const usuario = _buscarUsuarioPorEmail(sheetUsuarios, emailLimpo);
+  if (!usuario) throw new Error('E-mail não encontrado. Faça o cadastro primeiro.');
+  if (usuario.status !== 'ativo') throw new Error('Conta desativada. Contate o setor de viagens.');
+
+  const hash = _hashSenha(senha, usuario.senha_salt);
+  if (hash !== usuario.senha_hash) throw new Error('Senha incorreta.');
+
+  const token = Utilities.getUuid();
+  CacheService.getScriptCache().put(
+    'sess_' + token,
+    JSON.stringify({ cpf: usuario.cpf, email: emailLimpo, nome: usuario.nome || '' }),
+    8 * 60 * 60  // 8 horas
+  );
+
+  _atualizarLinhaUsuario(sheetUsuarios, usuario._rowIndex, { ultimo_acesso: new Date() });
+  Logger.log('[AUTH] Login: ' + emailLimpo);
+  return { token: token, nome: usuario.nome || '', email: emailLimpo };
+}
+
+// ── Sessão ──────────────────────────────────────────────────
+
+/**
+ * Valida o token de sessão.
+ * @param {string} token
+ * @returns {{ cpf: string, email: string, nome: string }|null}
+ */
+function validarSessao(token) {
+  if (!token) return null;
+  const raw = CacheService.getScriptCache().get('sess_' + token);
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch (_) { return null; }
+}
+
+/**
+ * Invalida o token (logout).
+ * @param {string} token
+ */
+function logoutUsuario(token) {
+  if (!token) return;
+  CacheService.getScriptCache().remove('sess_' + token);
+}
+
+// ── Redefinição de senha ─────────────────────────────────────
+
+/**
+ * Gera nova senha para o e-mail informado e reenvia por e-mail.
+ * @param {string} email
+ * @returns {{ ok: boolean }}
+ */
+function redefinirSenha(email) {
+  if (!email) throw new Error('E-mail obrigatório.');
+  const emailLimpo = email.toLowerCase().trim();
+  if (!_validarDominio(emailLimpo)) throw new Error('E-mail não pertence ao grupo Magalu.');
+
+  const sheetUsuarios = _getSheetUsuarios();
+  const usuario = _buscarUsuarioPorEmail(sheetUsuarios, emailLimpo);
+  if (!usuario) throw new Error('E-mail não cadastrado. Faça o cadastro primeiro.');
+
+  const salt  = _gerarSalt();
+  const senha = _gerarSenha();
+  const hash  = _hashSenha(senha, salt);
+
+  _atualizarLinhaUsuario(sheetUsuarios, usuario._rowIndex, {
+    senha_hash: hash, senha_salt: salt, status: 'ativo',
+  });
+  _enviarEmailSenha(emailLimpo, usuario.nome || 'Colaborador', senha);
+  Logger.log('[AUTH] Senha redefinida para: ' + emailLimpo);
+  return { ok: true };
+}
+
+// ── Helpers privados ─────────────────────────────────────────
+
+function _validarDominio(email) {
+  if (!email || !email.includes('@')) return false;
+  const dominio = email.split('@')[1].toLowerCase();
+  return DOMINIOS_MAGALU.includes(dominio);
+}
+
+/**
+ * SHA-256(senha + salt) → string hexadecimal de 64 chars.
+ */
+function _hashSenha(senha, salt) {
+  const digest = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    senha + salt,
+    Utilities.Charset.UTF_8
+  );
+  return digest.map(function(b) {
+    return ('0' + (b & 0xFF).toString(16)).slice(-2);
+  }).join('');
+}
+
+/**
+ * Salt aleatório de 32 caracteres (letras, dígitos e símbolos seguros).
+ */
+function _gerarSalt() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%&*';
+  let s = '';
+  for (let i = 0; i < 32; i++) {
+    s += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return s;
+}
+
+/**
+ * Senha de complexidade média: 10 chars, pelo menos 1 maiúscula, 1 minúscula, 1 dígito, 1 símbolo.
+ * Evita caracteres ambíguos (0, O, 1, l, I).
+ */
+function _gerarSenha() {
+  const upper   = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const lower   = 'abcdefghjkmnpqrstuvwxyz';
+  const digits  = '23456789';
+  const special = '@#$%&*!';
+  const all     = upper + lower + digits + special;
+
+  let s = '';
+  s += upper[Math.floor(Math.random() * upper.length)];
+  s += lower[Math.floor(Math.random() * lower.length)];
+  s += digits[Math.floor(Math.random() * digits.length)];
+  s += special[Math.floor(Math.random() * special.length)];
+  for (let i = 0; i < 6; i++) {
+    s += all[Math.floor(Math.random() * all.length)];
+  }
+  // Embaralha para evitar padrão fixo
+  return s.split('').sort(function() { return 0.5 - Math.random(); }).join('');
+}
+
+/**
+ * Retorna a aba Usuarios, criando-a se necessário.
+ */
+function _getSheetUsuarios() {
+  const cfg = getConfig();
+  const ss  = SpreadsheetApp.openById(cfg.SHEET_ID);
+  let aba   = ss.getSheetByName('Usuarios');
+  if (!aba) {
+    aba = ss.insertSheet('Usuarios');
+    aba.appendRow(['cpf','email','nome','senha_hash','senha_salt','telefone','rg','data_nascimento','status','criado_em','ultimo_acesso']);
+    aba.setFrozenRows(1);
+  }
+  return aba;
+}
+
+/**
+ * Busca usuário na aba Usuarios por CPF (sem formatação).
+ * Retorna o objeto com _rowIndex (1-based) para futuras atualizações, ou null.
+ */
+function _buscarUsuarioPorCPF(sheet, cpf) {
+  const dados = sheet.getDataRange().getValues();
+  const hdr   = dados[0];
+  const iCPF  = hdr.indexOf('cpf');
+  for (let i = 1; i < dados.length; i++) {
+    if (String(dados[i][iCPF] || '').replace(/\D/g,'') === cpf) {
+      const obj = linhaParaObjeto(hdr, dados[i]);
+      obj._rowIndex = i + 1;
+      return obj;
+    }
+  }
+  return null;
+}
+
+/**
+ * Busca usuário na aba Usuarios por e-mail.
+ * Retorna o objeto com _rowIndex ou null.
+ */
+function _buscarUsuarioPorEmail(sheet, email) {
+  const dados  = sheet.getDataRange().getValues();
+  const hdr    = dados[0];
+  const iEmail = hdr.indexOf('email');
+  for (let i = 1; i < dados.length; i++) {
+    if ((dados[i][iEmail] || '').toLowerCase().trim() === email) {
+      const obj = linhaParaObjeto(hdr, dados[i]);
+      obj._rowIndex = i + 1;
+      return obj;
+    }
+  }
+  return null;
+}
+
+/**
+ * Atualiza campos específicos de uma linha da aba Usuarios.
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet
+ * @param {number} rowIndex - linha 1-based
+ * @param {Object} campos - { campo: valor, ... }
+ */
+function _atualizarLinhaUsuario(sheet, rowIndex, campos) {
+  const hdr = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  Object.entries(campos).forEach(function([col, val]) {
+    const idx = hdr.indexOf(col);
+    if (idx >= 0) sheet.getRange(rowIndex, idx + 1).setValue(val);
+  });
+}
+
+/**
+ * Envia a senha gerada ao e-mail corporativo do colaborador.
+ */
+function _enviarEmailSenha(email, nome, senha) {
+  const cfg = getConfig();
+  const webUrl = cfg.WEBAPP_URL || '';
+  const html = `
+    <div style="font-family:sans-serif;max-width:560px;margin:auto">
+      <div style="background:#0086FF;padding:20px;border-radius:8px 8px 0 0">
+        <h2 style="color:#fff;margin:0">Acesso ao Portal de Viagens</h2>
+        <p style="color:#FFCE00;margin:4px 0 0">Grupo Magalu</p>
+      </div>
+      <div style="background:#fff;padding:24px;border:1px solid #e0e0e0;border-top:none">
+        <p>Olá, <strong>${nome}</strong>!</p>
+        <p>Seu cadastro no Portal de Solicitação de Viagens Corporativas foi realizado com sucesso.</p>
+        <p>Utilize as credenciais abaixo para fazer login:</p>
+        <table style="width:100%;border-collapse:collapse;margin:16px 0;background:#f5f5f5;border-radius:6px">
+          <tr>
+            <td style="padding:12px 16px;color:#666;width:120px">E-mail:</td>
+            <td style="padding:12px 16px;font-weight:600">${email}</td>
+          </tr>
+          <tr>
+            <td style="padding:12px 16px;color:#666;border-top:1px solid #e0e0e0">Senha:</td>
+            <td style="padding:12px 16px;font-weight:600;letter-spacing:2px;font-size:18px;border-top:1px solid #e0e0e0">${senha}</td>
+          </tr>
+        </table>
+        <p style="color:#c62828;font-size:13px">⚠ Por segurança, não compartilhe esta senha. Ela é de uso pessoal e intransferível.</p>
+        ${webUrl ? `<div style="text-align:center;margin:24px 0">
+          <a href="${webUrl}" style="background:#0086FF;color:#fff;padding:14px 32px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:15px">Acessar o Portal</a>
+        </div>` : ''}
+        <p style="color:#999;font-size:11px;margin-top:20px;border-top:1px solid #eee;padding-top:12px">
+          Portal de Viagens Corporativas Magalu | Dúvidas: ${cfg.EMAIL_VIAGENS || 'setor de viagens'}
+        </p>
+      </div>
+    </div>`;
+
+  GmailApp.sendEmail(email,
+    '[Viagens Magalu] Seus dados de acesso ao Portal',
+    'Login: ' + email + '\nSenha: ' + senha + '\n\nAcesse: ' + webUrl,
+    { htmlBody: html, name: 'Portal de Viagens Magalu' }
+  );
+}
