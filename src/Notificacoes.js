@@ -210,7 +210,11 @@ function enviarEmailPreAprovacaoSetor(reqID, req) {
 
   GmailApp.sendEmail(email,
     `[PRE-APROVACAO] ${req.nome_viajante} - ${req.destino_cidade} | ${reqID}`,
-    '', { htmlBody: html, name: 'Sistema de Viagens Magalu' });
+    '', {
+      htmlBody: html,
+      name: 'Sistema de Viagens Magalu',
+      attachments: _gerarAnexoPDF(reqID, viajante, req, req.classificacao_aereo || ''),
+    });
   Logger.log(`[PRÉ-APROVAÇÃO EMAIL] Enviado para: ${email} | req: ${reqID}`);
 }
 
