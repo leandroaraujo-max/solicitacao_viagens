@@ -13,27 +13,54 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { google }              from 'googleapis';
 import { GoogleAuth }          from 'google-auth-library';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, writeFileSync } from 'fs';
 import { join, dirname }       from 'path';
 import { fileURLToPath }       from 'url';
 
-const __dirname  = dirname(fileURLToPath(import.meta.url));
-const SA_PATH    = join(__dirname, '..', '.secrets', 'google-sa.json');
+const __dirname   = dirname(fileURLToPath(import.meta.url));
+const SA_PATH     = join(__dirname, '..', '.secrets', 'google-sa.json');
+const OAUTH_PATH  = join(__dirname, '..', '.secrets', 'oauth-client.json');
+const TOKEN_PATH  = join(__dirname, '..', '.secrets', 'oauth-token.json');
 const CONFIG_PATH = join(__dirname, '..', '.mcp-config.json');
 
-// ── Carrega credenciais e config ─────────────────────────────
-function loadAuth() {
-  if (!existsSync(SA_PATH)) {
-    throw new Error(`Service account não encontrada em ${SA_PATH}. Siga o PASSO 1 do guia.`);
+// ── Autenticação — tenta 3 métodos em ordem ──────────────────
+// 1. Service Account (se existir)
+// 2. OAuth Client ID próprio + token salvo (solução definitiva)
+// 3. Application Default Credentials (gcloud auth application-default login)
+async function getAuthClient() {
+  const SCOPES = [
+    'https://www.googleapis.com/auth/spreadsheets',
+    'https://www.googleapis.com/auth/drive.readonly',
+  ];
+
+  // Método 1: Service Account
+  if (existsSync(SA_PATH)) {
+    return new GoogleAuth({ keyFile: SA_PATH, scopes: SCOPES });
   }
-  return new GoogleAuth({
-    keyFile: SA_PATH,
-    scopes: [
-      'https://www.googleapis.com/auth/spreadsheets',
-      'https://www.googleapis.com/auth/drive.readonly',
-      'https://www.googleapis.com/auth/bigquery.readonly',
-    ],
-  });
+
+  // Método 2: OAuth Client ID próprio
+  if (existsSync(OAUTH_PATH)) {
+    const { OAuth2Client } = await import('google-auth-library');
+    const keys   = JSON.parse(readFileSync(OAUTH_PATH, 'utf-8'));
+    const { client_id, client_secret, redirect_uris } = keys.installed || keys.web;
+    const oauth2 = new OAuth2Client(client_id, client_secret, redirect_uris[0]);
+
+    if (existsSync(TOKEN_PATH)) {
+      oauth2.setCredentials(JSON.parse(readFileSync(TOKEN_PATH, 'utf-8')));
+      return oauth2;
+    }
+
+    // Gerar URL de autorização para o usuário abrir no browser
+    const authUrl = oauth2.generateAuthUrl({ access_type: 'offline', scope: SCOPES });
+    throw new Error(
+      `Token OAuth não encontrado.\n` +
+      `Abra esta URL no browser, faça login e cole o código aqui:\n${authUrl}\n\n` +
+      `Em seguida, execute: node mcp/auth.js <CODIGO_DO_BROWSER>`
+    );
+  }
+
+  // Método 3: ADC (gcloud auth application-default login)
+  return new GoogleAuth({ scopes: SCOPES });
 }
 
 function loadConfig() {
@@ -45,7 +72,7 @@ function loadConfig() {
 
 /** Lê uma aba inteira e retorna { headers, rows: [{...}] } */
 async function lerAba(sheetId, abaName, maxRows = 200) {
-  const auth    = loadAuth();
+  const auth    = await getAuthClient();
   const sheets  = google.sheets({ version: 'v4', auth });
   const range   = `${abaName}!A1:ZZ${maxRows}`;
   const resp    = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range });
@@ -206,7 +233,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     if (name === 'drive_listar') {
-      const auth  = loadAuth();
+      const auth  = await getAuthClient();
       const drive = google.drive({ version: 'v3', auth });
       const resp  = await drive.files.list({
         q:        `'${args.pastaId}' in parents and trashed = false`,
