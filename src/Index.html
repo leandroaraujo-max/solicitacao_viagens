@@ -454,7 +454,7 @@ function mascaraCPF(el) {
   el.value = v;
 }
 
-function soCpf(v) { return v.replace(/\D/g,''); }
+function soCpf(v) { return String(v || '').replace(/\D/g,''); }
 
 function formatarCPF(cpf) {
   const v = String(cpf || '').replace(/\D/g,'').slice(0,11);
