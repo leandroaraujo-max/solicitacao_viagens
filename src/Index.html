@@ -420,7 +420,11 @@ const SESSION_CPF   = '<?= sessionCpf ?>';
 const SESSION_NOME  = '<?= sessionNome ?>';
 const SESSION_EMAIL = '<?= sessionEmail ?>';
 const SESSION_TOKEN = '<?= sessionToken ?>';
-  const WEBAPP_URL    = '<?= webAppUrl ?>';
+const WEBAPP_URL    = '<?= webAppUrl ?>';
+
+// B1: lista de valores que representam modalidades de serviço (evita capturar outros checkboxes)
+const SERVICOS_VALIDOS = ['Aereo', 'Rodoviario', 'Hospedagem', 'Carro'];
+
 // ── Estado da aplicação ──────────────────────────────────────
 const estado = {
   operador: null,
