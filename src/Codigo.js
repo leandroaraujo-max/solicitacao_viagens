@@ -59,9 +59,12 @@ function doGet(e) {
         .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
     }
 
-    return HtmlService
-      .createTemplateFromFile('Index')
-      .evaluate()
+    const tmpl = HtmlService.createTemplateFromFile('Index');
+    tmpl.sessionCpf   = sessao.cpf   || '';
+    tmpl.sessionNome  = sessao.nome  || '';
+    tmpl.sessionEmail = sessao.email || '';
+    tmpl.sessionToken = params.sessionToken || '';
+    return tmpl.evaluate()
       .setTitle('Portal de Viagens — Magalu')
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   } catch (err) {
@@ -131,6 +134,8 @@ function doPost_proxy(payload) {
     // Auth
     cadastrarUsuario:      () => cadastrarUsuario(payload.cpf, payload.telefone, payload.rg, payload.dataNascimento),
     loginUsuario:          () => loginUsuario(payload.email, payload.senha),
+    alterarSenha:          () => alterarSenha(payload.token, payload.novaSenha, payload.confirmacao),
+    carregarPerfilUsuario: () => carregarPerfilUsuario(payload.cpf),
     validarSessao:         () => validarSessao(payload.token),
     logoutUsuario:         () => { logoutUsuario(payload.token); return { ok: true }; },
     redefinirSenha:        () => redefinirSenha(payload.email),
@@ -326,7 +331,7 @@ function inicializarPlanilha() {
     ],
     'Usuarios': [
       'cpf', 'email', 'nome', 'senha_hash', 'senha_salt',
-      'telefone', 'rg', 'data_nascimento', 'status', 'criado_em', 'ultimo_acesso',
+      'telefone', 'rg', 'data_nascimento', 'status', 'criado_em', 'ultimo_acesso', 'senha_temporaria',
     ],
   };
 

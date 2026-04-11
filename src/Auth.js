@@ -50,13 +50,14 @@ function cadastrarUsuario(cpf, telefone, rg, dataNascimento) {
   const agora = new Date();
 
   if (existente) {
-    // Reativa conta existente (status inativo) com nova senha
+    // Reativa conta existente (status inativo) com nova senha temporária
     _atualizarLinhaUsuario(sheetUsuarios, existente._rowIndex, {
       senha_hash: hash, senha_salt: salt,
       telefone: telefone || existente.telefone || '',
       rg: rg || existente.rg || '',
       data_nascimento: dataNascimento || existente.data_nascimento || '',
       status: 'ativo',
+      senha_temporaria: true,
     });
   } else {
     sheetUsuarios.appendRow([
@@ -70,7 +71,8 @@ function cadastrarUsuario(cpf, telefone, rg, dataNascimento) {
       dataNascimento || '',
       'ativo',
       agora,
-      '',
+      '',   // ultimo_acesso
+      true, // senha_temporaria — colaborador DEVE trocar no primeiro acesso
     ]);
   }
 
@@ -100,16 +102,18 @@ function loginUsuario(email, senha) {
   const hash = _hashSenha(senha, usuario.senha_salt);
   if (hash !== usuario.senha_hash) throw new Error('Senha incorreta.');
 
+  const trocarSenha = (usuario.senha_temporaria === true || String(usuario.senha_temporaria).toLowerCase() === 'true');
+
   const token = Utilities.getUuid();
   CacheService.getScriptCache().put(
     'sess_' + token,
-    JSON.stringify({ cpf: usuario.cpf, email: emailLimpo, nome: usuario.nome || '' }),
+    JSON.stringify({ cpf: usuario.cpf, email: emailLimpo, nome: usuario.nome || '', trocarSenha: trocarSenha }),
     8 * 60 * 60  // 8 horas
   );
 
   _atualizarLinhaUsuario(sheetUsuarios, usuario._rowIndex, { ultimo_acesso: new Date() });
-  Logger.log('[AUTH] Login: ' + emailLimpo);
-  return { token: token, nome: usuario.nome || '', email: emailLimpo };
+  Logger.log('[AUTH] Login: ' + emailLimpo + (trocarSenha ? ' (troca de senha obrigatória)' : ''));
+  return { token: token, nome: usuario.nome || '', email: emailLimpo, trocarSenha: trocarSenha };
 }
 
 // ── Sessão ──────────────────────────────────────────────────
@@ -156,11 +160,66 @@ function redefinirSenha(email) {
   const hash  = _hashSenha(senha, salt);
 
   _atualizarLinhaUsuario(sheetUsuarios, usuario._rowIndex, {
-    senha_hash: hash, senha_salt: salt, status: 'ativo',
+    senha_hash: hash, senha_salt: salt, status: 'ativo', senha_temporaria: true,
   });
   _enviarEmailSenha(emailLimpo, usuario.nome || 'Colaborador', senha);
   Logger.log('[AUTH] Senha redefinida para: ' + emailLimpo);
   return { ok: true };
+}
+
+// ── Alteração de senha (obrigatória no primeiro acesso) ──────
+
+/**
+ * Permite ao colaborador definir a sua própria senha permanente.
+ * Requer um token de sessão ativo (gerado no login).
+ * @param {string} token - token de sessão
+ * @param {string} novaSenha
+ * @param {string} confirmacao
+ * @returns {{ ok: boolean }}
+ */
+function alterarSenha(token, novaSenha, confirmacao) {
+  if (!token) throw new Error('Sessão inválida. Faça login novamente.');
+  const sessao = validarSessao(token);
+  if (!sessao) throw new Error('Sessão expirada. Faça login novamente.');
+
+  if (!novaSenha || novaSenha.length < 8) throw new Error('A nova senha deve ter no mínimo 8 caracteres.');
+  if (novaSenha !== confirmacao) throw new Error('As senhas não conferem. Digite novamente.');
+  if (!_validarComplexidadeSenha(novaSenha)) {
+    throw new Error('A senha deve conter pelo menos: 1 letra maiúscula, 1 minúscula, 1 número e 1 símbolo (@#$%&*!_-+).');
+  }
+
+  const sheetUsuarios = _getSheetUsuarios();
+  const usuario = _buscarUsuarioPorCPF(sheetUsuarios, sessao.cpf);
+  if (!usuario) throw new Error('Usuário não encontrado.');
+
+  const salt = _gerarSalt();
+  const hash = _hashSenha(novaSenha, salt);
+  _atualizarLinhaUsuario(sheetUsuarios, usuario._rowIndex, {
+    senha_hash: hash, senha_salt: salt, senha_temporaria: false,
+  });
+
+  // Atualiza o payload da sessão para remover a flag trocarSenha
+  CacheService.getScriptCache().put(
+    'sess_' + token,
+    JSON.stringify({ cpf: sessao.cpf, email: sessao.email, nome: sessao.nome, trocarSenha: false }),
+    8 * 60 * 60
+  );
+
+  Logger.log('[AUTH] Senha alterada para: ' + sessao.email);
+  return { ok: true };
+}
+
+/**
+ * Valida se uma senha escolhida pelo usuário atende complexidade mínima:
+ * ≥8 chars, ≥1 maiúscula, ≥1 minúscula, ≥1 dígito, ≥1 símbolo.
+ */
+function _validarComplexidadeSenha(senha) {
+  if (!senha || senha.length < 8) return false;
+  if (!/[A-Z]/.test(senha)) return false;
+  if (!/[a-z]/.test(senha)) return false;
+  if (!/[0-9]/.test(senha)) return false;
+  if (!/[@#$%&*!_\-+]/.test(senha)) return false;
+  return true;
 }
 
 // ── Helpers privados ─────────────────────────────────────────
@@ -326,4 +385,32 @@ function _enviarEmailSenha(email, nome, senha) {
     'Login: ' + email + '\nSenha: ' + senha + '\n\nAcesse: ' + webUrl,
     { htmlBody: html, name: 'Portal de Viagens Magalu' }
   );
+}
+
+// ── Perfil completo (BQ + Usuarios) ─────────────────────────
+
+/**
+ * Retorna o perfil completo do colaborador mesclando BQ/Viajantes (centro_custo,
+ * cod_centro_custo, cargo, filial etc.) com Usuarios (data_nascimento, telefone, rg).
+ * Utilizado para preencher o cabeçalho da solicitação.
+ * @param {string} cpf
+ * @returns {Object}
+ */
+function carregarPerfilUsuario(cpf) {
+  const cpfLimpo = String(cpf || '').replace(/\D/g, '');
+  if (!cpfLimpo || cpfLimpo.length !== 11) throw new Error('CPF inválido.');
+
+  const viajante = buscarViajante(cpfLimpo);
+  if (!viajante) throw new Error('Colaborador não encontrado.');
+
+  // Complementa com dados da aba Usuarios (cadastro)
+  const sheetUsuarios = _getSheetUsuarios();
+  const usuario = _buscarUsuarioPorCPF(sheetUsuarios, cpfLimpo);
+  if (usuario) {
+    viajante.data_nascimento = usuario.data_nascimento || viajante.data_nascimento || '';
+    viajante.telefone        = usuario.telefone        || viajante.telefone        || '';
+    viajante.rg              = usuario.rg              || viajante.rg              || '';
+  }
+
+  return viajante;
 }

@@ -108,6 +108,11 @@
     .success-box h3 { font-size: 18px; color: #2e7d32; margin: 12px 0 8px; }
     .success-box p { font-size: 13px; color: #555; line-height: 1.6; }
     .success-box .email-dest { font-weight: 700; color: #0086FF; word-break: break-all; }
+
+    .senha-requisitos { font-size: 11px; color: #666; margin-top: 10px; line-height: 1.8; }
+    .senha-requisitos span { display: block; }
+    .senha-requisitos span.ok  { color: #2e7d32; }
+    .senha-requisitos span.nok { color: #b0b0b0; }
   </style>
 </head>
 <body>
@@ -196,10 +201,39 @@
     <div class="divider">ou</div>
     <button type="button" class="btn-link" style="display:block;text-align:center;width:100%" onclick="showTab('login')">← Voltar ao login</button>
   </div>
+
+  <!-- ══ PAINEL TROCA DE SENHA OBRIGATÓRIA ══ -->
+  <div id="panel-trocar-senha" class="panel">
+    <div id="msg-trocar" class="msg info" style="display:block">
+      🔒 Por segurança, você precisa definir uma senha pessoal antes de continuar.
+    </div>
+    <form onsubmit="return false">
+      <div class="field">
+        <label for="ts-nova">Nova senha</label>
+        <input type="password" id="ts-nova" autocomplete="new-password" placeholder="Mínimo 8 caracteres"
+               oninput="verificarRequisitos()">
+      </div>
+      <div class="field">
+        <label for="ts-conf">Confirmar nova senha</label>
+        <input type="password" id="ts-conf" autocomplete="new-password" placeholder="Repita a senha">
+      </div>
+      <div class="senha-requisitos" id="ts-requisitos">
+        <span id="req-len" class="nok">✗ Mínimo 8 caracteres</span>
+        <span id="req-mai" class="nok">✗ 1 letra maiúscula</span>
+        <span id="req-min" class="nok">✗ 1 letra minúscula</span>
+        <span id="req-num" class="nok">✗ 1 número</span>
+        <span id="req-sim" class="nok">✗ 1 símbolo (@#$%&*!_-+)</span>
+      </div>
+      <button type="submit" class="btn-primary" id="btn-trocar" onclick="fazerTrocaSenha()" style="margin-top:18px">
+        Definir minha senha
+      </button>
+    </form>
+  </div>
 </div>
 
 <script>
   const WEBAPP_URL = '<?= webAppUrl ?>';
+  let _sessionToken = null; // guardado durante troca de senha
 
   function showTab(name) {
     document.querySelectorAll('.panel').forEach(function(p) { p.classList.remove('active'); });
@@ -215,6 +249,7 @@
 
   function limparMensagens() {
     document.querySelectorAll('.msg').forEach(function(m) {
+      if (m.id === 'msg-trocar') return; // não limpa o aviso fixo
       m.style.display = 'none'; m.textContent = '';
     });
   }
@@ -263,11 +298,19 @@
       .withSuccessHandler(function(resp) {
         setLoading('btn-login', false, 'Entrar');
         if (resp && resp.sucesso) {
-          sessionStorage.setItem('vvl_token', resp.dados.token);
-          sessionStorage.setItem('vvl_nome',  resp.dados.nome);
-          sessionStorage.setItem('vvl_email', resp.dados.email);
-          // Redireciona para o portal com o token na URL para validação server-side
-          window.top.location.href = WEBAPP_URL + '?sessionToken=' + encodeURIComponent(resp.dados.token);
+          const d = resp.dados;
+          sessionStorage.setItem('vvl_token', d.token);
+          sessionStorage.setItem('vvl_nome',  d.nome);
+          sessionStorage.setItem('vvl_email', d.email);
+
+          if (d.trocarSenha) {
+            // Senha temporária — exige troca antes de acessar o portal
+            _sessionToken = d.token;
+            document.querySelectorAll('.tab-btn').forEach(function(b) { b.style.display = 'none'; });
+            showTab('trocar-senha');
+          } else {
+            window.top.location.href = WEBAPP_URL + '?sessionToken=' + encodeURIComponent(d.token);
+          }
         } else {
           mostrarMsg('msg-login', resp && resp.erro ? resp.erro : 'Erro ao fazer login.', 'erro');
         }
@@ -277,6 +320,49 @@
         mostrarMsg('msg-login', 'Erro de comunicação: ' + (err.message || err), 'erro');
       })
       .doPost_proxy({ acao: 'loginUsuario', email: email, senha: senha });
+  }
+
+  // ── Troca de senha obrigatória ────────────────────────────
+  function verificarRequisitos() {
+    const v = document.getElementById('ts-nova').value;
+    function set(id, ok) {
+      const el = document.getElementById(id);
+      const txt = { 'req-len': ok ? '✓ Mínimo 8 caracteres' : '✗ Mínimo 8 caracteres',
+                    'req-mai': ok ? '✓ 1 letra maiúscula'   : '✗ 1 letra maiúscula',
+                    'req-min': ok ? '✓ 1 letra minúscula'   : '✗ 1 letra minúscula',
+                    'req-num': ok ? '✓ 1 número'            : '✗ 1 número',
+                    'req-sim': ok ? '✓ 1 símbolo (@#$%&*!_-+)' : '✗ 1 símbolo (@#$%&*!_-+)' };
+      el.textContent = txt[id];
+      el.className = ok ? 'ok' : 'nok';
+    }
+    set('req-len', v.length >= 8);
+    set('req-mai', /[A-Z]/.test(v));
+    set('req-min', /[a-z]/.test(v));
+    set('req-num', /[0-9]/.test(v));
+    set('req-sim', /[@#$%&*!_\-+]/.test(v));
+  }
+
+  function fazerTrocaSenha() {
+    const nova  = document.getElementById('ts-nova').value;
+    const conf  = document.getElementById('ts-conf').value;
+    if (!nova || !conf) { mostrarMsg('msg-trocar', 'Preencha os dois campos de senha.', 'erro'); return; }
+    if (nova !== conf)  { mostrarMsg('msg-trocar', 'As senhas não conferem.', 'erro'); return; }
+
+    setLoading('btn-trocar', true, 'Definir minha senha');
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        setLoading('btn-trocar', false, 'Definir minha senha');
+        if (resp && resp.sucesso) {
+          window.top.location.href = WEBAPP_URL + '?sessionToken=' + encodeURIComponent(_sessionToken);
+        } else {
+          mostrarMsg('msg-trocar', resp && resp.erro ? resp.erro : 'Erro ao alterar senha.', 'erro');
+        }
+      })
+      .withFailureHandler(function(err) {
+        setLoading('btn-trocar', false, 'Definir minha senha');
+        mostrarMsg('msg-trocar', 'Erro de comunicação: ' + (err.message || err), 'erro');
+      })
+      .doPost_proxy({ acao: 'alterarSenha', token: _sessionToken, novaSenha: nova, confirmacao: conf });
   }
 
   // ── Cadastro ─────────────────────────────────────────────

@@ -18,6 +18,8 @@
     <div style="display:flex;align-items:center;gap:12px">
       <a href="https://drive.google.com/file/d/1SFxzQXkTSr36KR4xJLNwp6vNMCa9_Rrg/view" target="_blank" style="color:#FFCE00;font-size:12px;text-decoration:none" title="Política de Viagens">📄 Política de Viagens</a>
       <span class="badge-magalu">Magalu</span>
+      <span id="headerNomeUsuario" style="color:#fff;font-size:13px;font-weight:600;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+      <button onclick="fazerLogout()" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.4);color:#fff;font-size:12px;padding:6px 12px;border-radius:6px;cursor:pointer" title="Sair do portal">Sair</button>
     </div>
   </div>
 </header>
@@ -27,6 +29,9 @@
   <!-- Passo 1: Identificação -->
   <div id="step-identificacao" class="card">
     <h2 class="card-title">Identificação do Solicitante</h2>
+
+    <!-- Dados cadastrais do usuário logado (preenchimento automático) -->
+    <div id="dadosCadastraisBox" class="info-box hidden" style="background:#e3f2fd;border-left:4px solid #1976d2;margin-bottom:18px;padding:14px 16px"></div>
 
     <div class="field-group">
       <label>Tipo de solicitação</label>
@@ -368,6 +373,12 @@
 </main>
 
 <script>
+// ── Variáveis de sessão injetadas pelo servidor ───────────────
+const SESSION_CPF   = '<?= sessionCpf ?>';
+const SESSION_NOME  = '<?= sessionNome ?>';
+const SESSION_EMAIL = '<?= sessionEmail ?>';
+const SESSION_TOKEN = '<?= sessionToken ?>';
+
 // ── Estado da aplicação ──────────────────────────────────────
 const estado = {
   operador: null,
@@ -397,11 +408,102 @@ function mascaraCPF(el) {
 
 function soCpf(v) { return v.replace(/\D/g,''); }
 
+function formatarCPF(cpf) {
+  const v = String(cpf || '').replace(/\D/g,'').slice(0,11);
+  if (v.length === 11) return v.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/,'$1.$2.$3-$4');
+  return v;
+}
+
+function formatarData(val) {
+  if (!val) return '—';
+  // Suporta ISO date (YYYY-MM-DD) e Date object
+  try {
+    const d = new Date(val);
+    if (isNaN(d)) return String(val);
+    return d.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+  } catch(_) { return String(val); }
+}
+
 function setBtn(id, loading, texto) {
   const b = document.getElementById(id);
   if (!b) return;
   b.disabled = loading;
   b.innerHTML = loading ? '<span class="btn-spin">⏳</span> Aguarde...' : texto;
+}
+
+// ── Init: auto-identificação via sessão ──────────────────────
+document.addEventListener('DOMContentLoaded', function() {
+  // Exibe nome do usuário no header
+  if (SESSION_NOME) {
+    const el = document.getElementById('headerNomeUsuario');
+    if (el) el.textContent = SESSION_NOME;
+  }
+
+  // Se há CPF de sessão, pré-preenche e identifica automaticamente
+  if (SESSION_CPF && SESSION_CPF.length === 11) {
+    const inputCPF = document.getElementById('cpfOperador');
+    if (inputCPF) {
+      inputCPF.value = formatarCPF(SESSION_CPF);
+      inputCPF.closest('.field-group').style.display = 'none'; // oculta o campo CPF (já preenchido)
+    }
+    // Esconde o botão "Identificar" também
+    const btnId = document.getElementById('btnIdentificar');
+    if (btnId) btnId.style.display = 'none';
+
+    // Chama carregarPerfilUsuario para obter dados completos (BQ + Usuarios)
+    setLoading('btnAvancarViagem', true, 'Avançar para dados da viagem →');
+    google.script.run
+      .withSuccessHandler(function(r) {
+        setLoading('btnAvancarViagem', false, 'Avançar para dados da viagem →');
+        if (r && r.sucesso) {
+          onOperadorEncontrado(r.dados);
+          renderizarDadosCadastrais(r.dados);
+        }
+      })
+      .withFailureHandler(function() {
+        setLoading('btnAvancarViagem', false, 'Avançar para dados da viagem →');
+        // Em caso de falha, exibe campo CPF para re-identificação manual
+        if (inputCPF) inputCPF.closest('.field-group').style.display = '';
+        if (btnId) btnId.style.display = '';
+      })
+      .doPost_proxy({ acao: 'carregarPerfilUsuario', cpf: SESSION_CPF });
+  }
+});
+
+/**
+ * Renderiza o cartão de dados cadastrais do usuário logado
+ * no topo do Passo 1 (cpf, data_nascimento, centro_custo, cod_centro_custo).
+ */
+function renderizarDadosCadastrais(v) {
+  const box = document.getElementById('dadosCadastraisBox');
+  if (!box || !v) return;
+  const cpfFmt  = formatarCPF(v.cpf || '');
+  const nascFmt = formatarData(v.data_nascimento);
+  box.innerHTML =
+    '<div style="display:flex;flex-wrap:wrap;gap:16px 32px;align-items:center">' +
+    '<div><span style="font-size:11px;color:#1565c0;font-weight:600;display:block">Colaborador</span>' +
+    '<strong style="font-size:15px">' + (v.nome || '—') + '</strong></div>' +
+    '<div><span style="font-size:11px;color:#1565c0;font-weight:600;display:block">CPF</span>' +
+    '<span>' + (cpfFmt || '—') + '</span></div>' +
+    '<div><span style="font-size:11px;color:#1565c0;font-weight:600;display:block">Data de Nascimento</span>' +
+    '<span>' + nascFmt + '</span></div>' +
+    '<div><span style="font-size:11px;color:#1565c0;font-weight:600;display:block">Centro de Custo</span>' +
+    '<span>' + (v.centro_custo || '—') + '</span></div>' +
+    (v.cod_centro_custo ? '<div><span style="font-size:11px;color:#1565c0;font-weight:600;display:block">Cód. Centro de Custo</span>' +
+    '<span>' + v.cod_centro_custo + '</span></div>' : '') +
+    '<div><span style="font-size:11px;color:#1565c0;font-weight:600;display:block">Cargo</span>' +
+    '<span>' + (v.cargo || '—') + '</span></div>' +
+    '</div>';
+  box.classList.remove('hidden');
+}
+
+// ── Logout ────────────────────────────────────────────────────
+function fazerLogout() {
+  if (SESSION_TOKEN) {
+    google.script.run.doPost_proxy({ acao: 'logoutUsuario', token: SESSION_TOKEN });
+  }
+  sessionStorage.clear();
+  window.top.location.href = window.top.location.href.split('?')[0];
 }
 
 // ── Navegação ────────────────────────────────────────────────
@@ -660,9 +762,13 @@ function validarLaudo(input) {
 function renderizarPerfilViajante() {
   const v  = estado.viajante;
   const el = document.getElementById('perfilViajante');
+  const cpfFmt  = formatarCPF(v.cpf || '');
+  const nascFmt = formatarData(v.data_nascimento);
   el.innerHTML = `
     <div class="perfil-grid">
       <span><label>Viajante</label><strong>${v.nome}</strong></span>
+      <span><label>CPF</label>${cpfFmt || '—'}</span>
+      ${nascFmt !== '—' ? `<span><label>Nascimento</label>${nascFmt}</span>` : ''}
       <span><label>Cargo</label>${v.cargo}</span>
       <span><label>Filial</label>${v.filial}</span>
       <span><label>Centro de Custo</label>${v.centro_custo}${v.cod_centro_custo ? ' <em>('+v.cod_centro_custo+')</em>' : ''}</span>
