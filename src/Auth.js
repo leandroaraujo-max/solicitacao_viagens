@@ -21,14 +21,22 @@ const DOMINIOS_MAGALU = [
  * Fluxo: CPF → busca BQ/cache → valida domínio e-mail → garante Usuarios tab
  *        → grava hash+salt → envia senha gerada ao e-mail corporativo.
  * @param {string} cpf
- * @param {string} [telefone]
- * @param {string} [rg]
- * @param {string} [dataNascimento]
+ * @param {string} telefone  — obrigatório
+ * @param {string} rg        — obrigatório
+ * @param {string} dataNascimento — obrigatório
+ * @param {boolean} [ehPCD]
+ * @param {boolean} [ehSono]
+ * @param {string}  [outraCondicao]
+ * @param {string}  [laudoPCDBase64]
+ * @param {string}  [laudoPCDNome]
  * @returns {{ email: string, nome: string }}
  */
-function cadastrarUsuario(cpf, telefone, rg, dataNascimento) {
+function cadastrarUsuario(cpf, telefone, rg, dataNascimento, ehPCD, ehSono, outraCondicao, laudoPCDBase64, laudoPCDNome) {
   const cpfLimpo = String(cpf || '').replace(/\D/g, '');
   if (!cpfLimpo || cpfLimpo.length !== 11) throw new Error('CPF inválido. Informe os 11 dígitos sem pontuação.');
+  if (!telefone || !String(telefone).trim()) throw new Error('Telefone celular é obrigatório.');
+  if (!rg       || !String(rg).trim())       throw new Error('RG é obrigatório.');
+  if (!dataNascimento)                        throw new Error('Data de nascimento é obrigatória.');
 
   const viajante = buscarViajante(cpfLimpo);
   if (!viajante || !viajante.email) throw new Error('Colaborador não encontrado ou sem e-mail corporativo cadastrado.');
@@ -74,6 +82,17 @@ function cadastrarUsuario(cpf, telefone, rg, dataNascimento) {
       '',   // ultimo_acesso
       true, // senha_temporaria — colaborador DEVE trocar no primeiro acesso
     ]);
+  }
+
+  // Grava condições especiais declaradas na aba Viajantes (cache BQ)
+  if (ehPCD || ehSono || outraCondicao) {
+    _atualizarCondicoesEspeciais(cpfLimpo, {
+      ehPCD:          !!ehPCD,
+      ehSono:         !!ehSono,
+      outraCondicao:  outraCondicao || '',
+      laudoPCDBase64: laudoPCDBase64 || null,
+      laudoPCDNome:   laudoPCDNome   || null,
+    });
   }
 
   _enviarEmailSenha(email, viajante.nome || 'Colaborador', senha);
@@ -385,6 +404,62 @@ function _enviarEmailSenha(email, nome, senha) {
     'Login: ' + email + '\nSenha: ' + senha + '\n\nAcesse: ' + webUrl,
     { htmlBody: html, name: 'Portal de Viagens Magalu' }
   );
+}
+
+// ── Condições especiais declaradas no cadastro ───────────────
+
+/**
+ * Atualiza os campos de condições especiais (PCD, sono, outra) na aba Viajantes.
+ * Se o laudo for fornecido, salva no Drive e grava o link.
+ */
+function _atualizarCondicoesEspeciais(cpf, opts) {
+  const cfg = getConfig();
+  const ss  = SpreadsheetApp.openById(cfg.SHEET_ID);
+  const aba = ss.getSheetByName('Viajantes');
+  if (!aba) return;
+
+  const dados = aba.getDataRange().getValues();
+  const hdr   = dados[0];
+  const idxCPF = hdr.indexOf('cpf');
+  const idxMat = hdr.indexOf('matricula');
+
+  let rowIdx = -1;
+  for (let i = 1; i < dados.length; i++) {
+    const cpfV = String(dados[i][idxCPF] || '').replace(/\D/g, '');
+    const matV = String(dados[i][idxMat] || '').replace(/\D/g, '');
+    if (cpfV === cpf || matV === cpf) { rowIdx = i + 1; break; }
+  }
+  if (rowIdx < 0) return; // viajante ainda não está no cache — será gravado no próximo acesso
+
+  const updates = {};
+  if (opts.ehPCD)       { updates['mobilidade_restrita'] = true; updates['mobilidade_obs'] = 'Declarado no cadastro'; }
+  if (opts.ehSono)      { updates['sono_disturbio'] = true; }
+  if (opts.outraCondicao) { updates['outra_condicao'] = true; updates['outra_obs'] = opts.outraCondicao; }
+
+  // Upload do laudo no Drive, se fornecido
+  if (opts.laudoPCDBase64 && opts.laudoPCDNome) {
+    try {
+      const pastaId  = cfg.PASTA_LAUDOS_ID;
+      const pasta    = pastaId ? DriveApp.getFolderById(pastaId) : DriveApp.getRootFolder();
+      const bytes    = Utilities.base64Decode(opts.laudoPCDBase64);
+      const blob     = Utilities.newBlob(bytes, 'application/pdf', opts.laudoPCDNome);
+      const arquivo  = pasta.createFile(blob);
+      arquivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      const link     = arquivo.getUrl();
+      if (opts.ehPCD)  updates['mobilidade_laudo_link'] = link;
+      if (opts.ehSono) updates['sono_laudo_link']       = link;
+      if (opts.outraCondicao) updates['outra_laudo_link'] = link;
+    } catch(err) {
+      Logger.log('[AUTH] Erro ao salvar laudo PCD: ' + err.message);
+    }
+  }
+
+  // Aplica na aba Viajantes
+  Object.entries(updates).forEach(function([col, val]) {
+    const idx = hdr.indexOf(col);
+    if (idx >= 0) aba.getRange(rowIdx, idx + 1).setValue(val);
+  });
+  Logger.log('[AUTH] Condições especiais atualizadas para CPF ' + cpf);
 }
 
 // ── Perfil completo (BQ + Usuarios) ─────────────────────────

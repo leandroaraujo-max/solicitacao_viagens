@@ -157,22 +157,51 @@
                  oninput="mascaraCPF(this)" autocomplete="off">
           <span class="hint">Seu CPF cadastrado na empresa. A senha será enviada ao seu e-mail corporativo.</span>
         </div>
-        <div class="optional-fields">
-          <span class="label-opt">Dados opcionais (contato) — podem ser preenchidos depois</span>
-          <div class="field" style="margin-bottom:12px">
-            <label for="c-tel">Telefone</label>
-            <input type="tel" id="c-tel" maxlength="15" placeholder="(11) 91234-5678"
-                   oninput="mascaraTelefone(this)">
+        <div class="field">
+          <label for="c-tel">Telefone celular <span style="color:#e53935">*</span></label>
+          <input type="tel" id="c-tel" maxlength="15" placeholder="(11) 91234-5678"
+                 oninput="mascaraTelefone(this)">
+        </div>
+        <div class="field">
+          <label for="c-rg">RG <span style="color:#e53935">*</span></label>
+          <input type="text" id="c-rg" maxlength="20" placeholder="00.000.000-0">
+        </div>
+        <div class="field">
+          <label for="c-nasc">Data de nascimento <span style="color:#e53935">*</span></label>
+          <input type="date" id="c-nasc">
+        </div>
+
+        <!-- Condições especiais -->
+        <div style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;margin-bottom:18px">
+          <p style="font-size:13px;font-weight:600;color:#444;margin-bottom:12px">Condições de saúde / acessibilidade</p>
+          <p style="font-size:12px;color:#666;margin-bottom:12px">Essas informações são confidenciais e usadas apenas para adequar reservas (quarto individual, assento com mais espaço, etc.).</p>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">
+            <label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer">
+              <input type="checkbox" id="c-pcd" onchange="toggleLaudoPCD()" style="width:16px;height:16px">
+              Sou PCD (Pessoa com Deficiência) ou tenho mobilidade reduzida
+            </label>
+            <label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer">
+              <input type="checkbox" id="c-sono" style="width:16px;height:16px">
+              Tenho distúrbio do sono (apneia, insônia crônica, etc.)
+            </label>
+            <label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer">
+              <input type="checkbox" id="c-outra" onchange="toggleOutraCondicao()" style="width:16px;height:16px">
+              Outra condição especial
+            </label>
           </div>
-          <div class="field" style="margin-bottom:12px">
-            <label for="c-rg">RG</label>
-            <input type="text" id="c-rg" maxlength="20" placeholder="00.000.000-0">
+          <div id="c-outra-desc" style="display:none;margin-bottom:12px">
+            <input type="text" id="c-outra-texto" placeholder="Descreva brevemente a condição" style="width:100%;padding:9px 12px;border:1.5px solid #d0d0d0;border-radius:8px;font-size:14px">
           </div>
-          <div class="field" style="margin-bottom:0">
-            <label for="c-nasc">Data de nascimento</label>
-            <input type="date" id="c-nasc">
+          <div id="c-laudo-pcd-wrap" style="display:none">
+            <label style="font-size:13px;font-weight:600;color:#444;display:block;margin-bottom:6px">
+              Laudo / documento comprobatório (PDF, máx 5 MB)
+            </label>
+            <input type="file" id="c-laudo-pcd" accept=".pdf" onchange="validarLaudoPCD(this)"
+                   style="font-size:13px">
+            <span id="c-laudo-pcd-status" style="font-size:12px;color:#888;display:block;margin-top:4px"></span>
           </div>
         </div>
+
         <button type="submit" class="btn-primary" id="btn-cadastro" onclick="fazerCadastro()">Cadastrar e receber senha</button>
       </form>
     </div>
@@ -233,7 +262,9 @@
 
 <script>
   const WEBAPP_URL = '<?= webAppUrl ?>';
-  let _sessionToken = null; // guardado durante troca de senha
+  let _sessionToken  = null;
+  let _laudoPCDBase64 = null;
+  let _laudoPCDNome   = null;
 
   function showTab(name) {
     document.querySelectorAll('.panel').forEach(function(p) { p.classList.remove('active'); });
@@ -365,13 +396,47 @@
       .doPost_proxy({ acao: 'alterarSenha', token: _sessionToken, novaSenha: nova, confirmacao: conf });
   }
 
+  // ── Helpers condição especial ─────────────────────────────
+  function toggleLaudoPCD() {
+    const chk = document.getElementById('c-pcd').checked;
+    const sono = document.getElementById('c-sono').checked;
+    document.getElementById('c-laudo-pcd-wrap').style.display = (chk || sono) ? 'block' : 'none';
+  }
+
+  document.getElementById('c-sono').addEventListener('change', toggleLaudoPCD);
+
+  function toggleOutraCondicao() {
+    const chk = document.getElementById('c-outra').checked;
+    document.getElementById('c-outra-desc').style.display = chk ? 'block' : 'none';
+  }
+
+  function validarLaudoPCD(input) {
+    const st = document.getElementById('c-laudo-pcd-status');
+    _laudoPCDBase64 = null;
+    const f = input.files[0];
+    if (!f) return;
+    if (f.type !== 'application/pdf') { st.textContent = '❌ Apenas PDF.'; input.value = ''; return; }
+    if (f.size > 5*1024*1024) { st.textContent = '❌ Máx 5 MB.'; input.value = ''; return; }
+    const r = new FileReader();
+    r.onload = function(e) {
+      _laudoPCDBase64 = e.target.result.split(',')[1];
+      _laudoPCDNome   = f.name;
+      st.textContent  = '✅ ' + f.name;
+      st.style.color  = '#2e7d32';
+    };
+    r.readAsDataURL(f);
+  }
+
   // ── Cadastro ─────────────────────────────────────────────
   function fazerCadastro() {
-    const cpf   = document.getElementById('c-cpf').value.replace(/\D/g, '');
-    const tel   = document.getElementById('c-tel').value.trim();
-    const rg    = document.getElementById('c-rg').value.trim();
-    const nasc  = document.getElementById('c-nasc').value;
+    const cpf  = document.getElementById('c-cpf').value.replace(/\D/g, '');
+    const tel  = document.getElementById('c-tel').value.trim();
+    const rg   = document.getElementById('c-rg').value.trim();
+    const nasc = document.getElementById('c-nasc').value;
     if (cpf.length !== 11) { mostrarMsg('msg-cadastro', 'Informe o CPF com 11 dígitos.', 'erro'); return; }
+    if (!tel)  { mostrarMsg('msg-cadastro', 'Telefone celular é obrigatório.', 'erro'); return; }
+    if (!rg)   { mostrarMsg('msg-cadastro', 'RG é obrigatório.', 'erro'); return; }
+    if (!nasc) { mostrarMsg('msg-cadastro', 'Data de nascimento é obrigatória.', 'erro'); return; }
 
     setLoading('btn-cadastro', true, 'Cadastrar e receber senha');
     google.script.run
@@ -390,7 +455,18 @@
         setLoading('btn-cadastro', false, 'Cadastrar e receber senha');
         mostrarMsg('msg-cadastro', 'Erro de comunicação: ' + (err.message || err), 'erro');
       })
-      .doPost_proxy({ acao: 'cadastrarUsuario', cpf: cpf, telefone: tel, rg: rg, dataNascimento: nasc });
+      .doPost_proxy({
+        acao: 'cadastrarUsuario',
+        cpf: cpf,
+        telefone: tel,
+        rg: rg,
+        dataNascimento: nasc,
+        ehPCD:          document.getElementById('c-pcd').checked,
+        ehSono:         document.getElementById('c-sono').checked,
+        outraCondicao:  document.getElementById('c-outra').checked ? (document.getElementById('c-outra-texto').value.trim() || 'Sim') : '',
+        laudoPCDBase64: _laudoPCDBase64 || null,
+        laudoPCDNome:   _laudoPCDNome   || null,
+      });
   }
 
   // ── Redefinição ──────────────────────────────────────────

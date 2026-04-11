@@ -77,25 +77,37 @@
 
     <div id="perfilViajante" class="perfil-box"></div>
 
+    <!-- L3-A: Motivo da viagem no cabeçalho -->
+    <div class="field-group">
+      <label for="motivoViagem">Motivo da viagem <span class="req">*</span></label>
+      <textarea id="motivoViagem" rows="2" placeholder="Ex: Reunião com cliente, treinamento, visita técnica..."></textarea>
+    </div>
+
     <!-- Origem + Destino -->
     <div class="grid-2">
       <div class="field-group">
-        <label for="origemCidade">Origem (cidade) <span class="req">*</span></label>
-        <input type="text" id="origemCidade" placeholder="Ex: Campinas" />
+        <label for="origemEstado">Estado de origem <span class="req">*</span></label>
+        <select id="origemEstado" onchange="carregarCidades('origemEstado','origemCidade')">
+          <option value="">Selecione...</option>
+        </select>
       </div>
       <div class="field-group">
-        <label for="origemEstado">Estado origem</label>
-        <input type="text" id="origemEstado" placeholder="Ex: SP" maxlength="2" />
+        <label for="origemCidade">Cidade de origem <span class="req">*</span></label>
+        <input type="text" id="origemCidade" placeholder="Digite ou selecione após escolher o estado" list="listOrigemCidades" autocomplete="off" />
+        <datalist id="listOrigemCidades"></datalist>
       </div>
     </div>
     <div class="grid-2">
       <div class="field-group">
-        <label for="destino">Destino (cidade) <span class="req">*</span></label>
-        <input type="text" id="destino" placeholder="Ex: Porto Alegre" />
+        <label for="estado">Estado de destino <span class="req">*</span></label>
+        <select id="estado" onchange="carregarCidades('estado','destino')">
+          <option value="">Selecione...</option>
+        </select>
       </div>
       <div class="field-group">
-        <label for="estado">Estado destino</label>
-        <input type="text" id="estado" placeholder="Ex: RS" maxlength="2" />
+        <label for="destino">Cidade de destino <span class="req">*</span></label>
+        <input type="text" id="destino" placeholder="Digite ou selecione após escolher o estado" list="listDestinoCidades" autocomplete="off" />
+        <datalist id="listDestinoCidades"></datalist>
       </div>
     </div>
 
@@ -156,25 +168,26 @@
     <div id="blocoRodoviario" class="card card-inner hidden">
       <h3>🚌 Transporte Rodoviário</h3>
       <div id="alertaLeito" class="alert alert-info hidden">
-        🌙 Partida entre 19h e 06h — é permitida a solicitação de <strong>ônibus leito</strong>.
+        🌙 Partida noturna (19h–06h) — é permitida a solicitação de <strong>ônibus leito</strong>.
+      </div>
+      <!-- L3-C: datas sem hora — período preferido é suficiente para cotação -->
+      <div class="grid-2">
+        <div class="field-group">
+          <label>Data de partida <span class="req">*</span></label>
+          <input type="date" id="rodovIda" />
+        </div>
+        <div class="field-group">
+          <label>Data de retorno</label>
+          <input type="date" id="rodovVolta" />
+        </div>
       </div>
       <div class="grid-2">
         <div class="field-group">
-          <label>Data e hora de partida <span class="req">*</span></label>
-          <input type="datetime-local" id="rodovIda" onchange="verificarAlertoLeito()" />
-        </div>
-        <div class="field-group">
-          <label>Data e hora de retorno</label>
-          <input type="datetime-local" id="rodovVolta" onchange="verificarAlertoLeito()" />
-        </div>
-      </div>
-      <div class="grid-2">
-        <div class="field-group">
-          <label>Período preferido</label>
+          <label>Período preferido <span style="font-size:11px;color:#888">(sugestão para cotação)</span></label>
           <div class="check-group">
-            <label class="check-opt"><input type="checkbox" name="periodoRodov" value="Manhã"> 🌅 Manhã</label>
-            <label class="check-opt"><input type="checkbox" name="periodoRodov" value="Tarde"> ☀ Tarde</label>
-            <label class="check-opt"><input type="checkbox" name="periodoRodov" value="Noite"> 🌙 Noite</label>
+            <label class="check-opt"><input type="checkbox" name="periodoRodov" value="Manhã"> 🌅 Manhã (06h–12h)</label>
+            <label class="check-opt"><input type="checkbox" name="periodoRodov" value="Tarde"> ☀ Tarde (12h–19h)</label>
+            <label class="check-opt"><input type="checkbox" name="periodoRodov" value="Noite"> 🌙 Noite/Madrugada (19h–06h)</label>
           </div>
         </div>
         <div class="field-group">
@@ -221,11 +234,6 @@
     </div>
 
     <div class="field-group">
-      <label for="motivoViagem">Motivo da viagem <span class="req">*</span></label>
-      <textarea id="motivoViagem" rows="3" placeholder="Ex: Reunião com cliente, treinamento, visita técnica..."></textarea>
-    </div>
-
-    <div class="field-group">
       <label for="observacoesViajante">Observações e necessidades específicas</label>
       <textarea id="observacoesViajante" rows="3" placeholder="Ex: Carro será retirado no 2° dia; viajante acima de 1,95m, prefere assento com mais espaço; voo de manhã cedo..."></textarea>
       <span class="field-hint">Essas informações serão compartilhadas com as agências para a cotação.</span>
@@ -243,19 +251,9 @@
         </label>
 
         <div id="camposExcecao" class="excecao-form hidden">
+          <!-- L3-D: tipo de condição removido; CID opcional -->
           <div class="field-group">
-            <label for="excecaoMotivo">Tipo de condição <span class="req">*</span></label>
-            <select id="excecaoMotivo">
-              <option value="">Selecione...</option>
-              <option value="Apneia do sono">Apneia do sono</option>
-              <option value="Insônia crônica">Insônia crônica</option>
-              <option value="Outro distúrbio do sono">Outro distúrbio do sono</option>
-              <option value="Mobilidade reduzida">Mobilidade reduzida</option>
-              <option value="Outro">Outro (especifique)</option>
-            </select>
-          </div>
-          <div class="field-group">
-            <label for="excecaoCID">CID <span class="req">*</span></label>
+            <label for="excecaoCID">CID <span style="font-size:11px;color:#888">(opcional — não exigido por lei)</span></label>
             <input type="text" id="excecaoCID" placeholder="Ex: G47.3" maxlength="10" />
           </div>
           <div class="field-group">
@@ -276,18 +274,7 @@
       </div>
     </div>
 
-    <!-- Viajantes adicionais -->
-    <div class="card card-inner">
-      <h3>👥 Viajantes adicionais (casamento de viagem)</h3>
-      <p class="field-hint">Informe colegas com a mesma viagem para otimizar a cotação.</p>
-      <div class="input-row">
-        <input type="text" id="matriculaColega" placeholder="CPF do colega" maxlength="14" oninput="mascaraCPF(this)" />
-        <button class="btn-secondary" id="btnVerificarColega" onclick="buscarColega()">Verificar compatibilidade</button>
-      </div>
-      <div id="infoColega" class="hidden"></div>
-    </div>
-
-    <!-- Preferências via Amadeus (opcional) -->
+    <!-- Preferências via Amadeus (opcional) — L2: bloco reposicionado após serviços -->
     <div class="card card-inner" id="blocoAmadeus">
       <h3>🔍 Preferências de voo e hospedagem <span style="font-size:12px;font-weight:normal;color:#888">(opcional)</span></h3>
       <p class="field-hint">Pesquise opções disponíveis e selecione sua preferência. Isso ajuda o setor de viagens a entender suas expectativas e elimina idas e vindas desnecessárias.</p>
@@ -319,12 +306,31 @@
             <div id="sugDestino" class="amadeus-sugestoes hidden"></div>
           </div>
         </div>
+        <!-- L2: spinner de busca IATA + loading de voos -->
+        <div id="iataLoadingOrigem" style="display:none;font-size:12px;color:#888;margin-top:4px">🔄 Buscando aeroporto...</div>
+        <div id="iataLoadingDestino" style="display:none;font-size:12px;color:#888;margin-top:4px">🔄 Buscando aeroporto...</div>
         <button class="btn-secondary" onclick="buscarVoos()" style="margin-top:8px" id="btnBuscarVoos">🔍 Buscar voos</button>
-        <div id="loadingVoos" class="field-hint hidden" style="margin-top:8px"><em>Buscando voos disponíveis...</em></div>
+        <div id="loadingVoos" class="field-hint hidden" style="margin-top:8px"><em>🔄 Buscando voos disponíveis nas companhias parceiras...</em></div>
         <div id="resultadosVoos" class="amadeus-resultados hidden"></div>
         <!-- Badges separados para ida e volta -->
         <div id="vooSelecionadoIda"   class="amadeus-selecionado hidden"></div>
         <div id="vooSelecionadoVolta" class="amadeus-selecionado hidden"></div>
+      </div>
+
+      <!-- L2/Sprint2: assento especial -->
+      <div id="secaoAssentoEspecial" class="hidden" style="margin-top:16px">
+        <h4 style="margin:12px 0 8px">💺 Assento Especial</h4>
+        <div style="background:#fff8e1;border-left:3px solid #f9a825;padding:10px 14px;border-radius:6px;font-size:12px;color:#555;margin-bottom:10px">
+          ⚠ A solicitação de assento especial (comfort, bulkhead, saída de emergência) deve ser <strong>comprovadamente por necessidades especiais</strong>. Será avaliada pelo setor de viagens.
+        </div>
+        <div class="check-group">
+          <label class="check-opt"><input type="checkbox" id="chkAssentoComfort"> Assento Comfort (mais espaço de pernas)</label>
+          <label class="check-opt"><input type="checkbox" id="chkAssentoBulkhead"> Bulkhead / Saída de emergência</label>
+          <label class="check-opt"><input type="checkbox" id="chkAssentoAcessivel"> Assento acessível (PCD / mobilidade reduzida)</label>
+        </div>
+        <div class="field-group" style="margin-top:8px">
+          <input type="text" id="motivoAssentoEspecial" placeholder="Justificativa (obrigatória se selecionado acima)" />
+        </div>
       </div>
 
       <!-- Preferência de Hotel (campo livre) -->
@@ -349,6 +355,17 @@
         <button class="btn-secondary" onclick="confirmarHotel()" style="margin-top:8px">✅ Confirmar preferência</button>
         <div id="hotelSelecionado" class="amadeus-selecionado hidden"></div>
       </div>
+    </div>
+
+    <!-- Viajantes adicionais (casamento de viagem) -->
+    <div class="card card-inner">
+      <h3>👥 Viajantes adicionais <span style="font-size:13px;font-weight:normal;color:#888">(casamento de viagem — opcional)</span></h3>
+      <p class="field-hint">Informe colegas com a mesma viagem para otimizar a cotação.</p>
+      <div class="input-row">
+        <input type="text" id="matriculaColega" placeholder="CPF do colega" maxlength="14" oninput="mascaraCPF(this)" />
+        <button class="btn-secondary" id="btnVerificarColega" onclick="buscarColega()">Verificar compatibilidade</button>
+      </div>
+      <div id="infoColega" class="hidden"></div>
     </div>
 
     <div class="btn-row">
@@ -709,6 +726,7 @@ function onServicoChange() {
   }
 
   document.getElementById('secaoBuscaVoo').classList.toggle('hidden', !temAereo);
+  document.getElementById('secaoAssentoEspecial').classList.toggle('hidden', !temAereo);
   if (temAereo) selecionarTrecho('ida');  // inicializa tabs e pré-preenche campos
   document.getElementById('secaoBuscaHotel').classList.toggle('hidden', !temHosp);
 
@@ -838,12 +856,21 @@ function submeterSolicitacao() {
     // exceção saúde
     quarto_excecao_saude:    temExcecao || estado.condicaoEspecialPreAprovada || false,
     excecao_pre_aprovada:    estado.condicaoEspecialPreAprovada || false,
-    excecao_motivo:          temExcecao ? document.getElementById('excecaoMotivo').value : (estado.viajante.excecao_motivo || ''),
+    excecao_motivo:          '',   // campo removido (L3-D)
     excecao_cid:             temExcecao ? document.getElementById('excecaoCID').value    : (estado.viajante.sono_cid || ''),
     excecao_validade:        temExcecao ? document.getElementById('excecaoValidade').value : (estado.viajante.sono_validade || ''),
     excecao_obs:             temExcecao ? document.getElementById('excecaoObs').value    : '',
     laudoBase64:             estado.laudoBase64 || null,
     laudoNome:               estado.laudoNome   || null,
+    // assento especial
+    assento_especial:        (() => {
+      const t = [];
+      if (document.getElementById('chkAssentoComfort')?.checked)   t.push('Comfort');
+      if (document.getElementById('chkAssentoBulkhead')?.checked)  t.push('Bulkhead');
+      if (document.getElementById('chkAssentoAcessivel')?.checked) t.push('Acessível');
+      return t.join(', ');
+    })(),
+    motivo_assento_especial: document.getElementById('motivoAssentoEspecial')?.value.trim() || '',
     // preferências Duffel
     ...(estado.preferencia_voo_ida   || {}),
     ...(estado.preferencia_voo_volta  || {}),
@@ -876,26 +903,42 @@ function debounceIATA(input, sugId) {
 }
 
 function buscarIATA(termo, inputId, sugId) {
+  // Mostra spinner no input correto
+  const spinnerId = inputId === 'amadeusOrigem' ? 'iataLoadingOrigem' : 'iataLoadingDestino';
+  const spinnerEl = document.getElementById(spinnerId);
+  if (spinnerEl) spinnerEl.style.display = 'block';
   google.script.run
     .withSuccessHandler(r => {
+      if (spinnerEl) spinnerEl.style.display = 'none';
       const locais = r?.dados?.locais;
       if (!r?.sucesso || !locais?.length) return;
       const el = document.getElementById(sugId);
-      el.innerHTML = locais.map(l =>
-        `<div class="amadeus-sug-item" onclick="selecionarIATA('${l.iataCode}','${l.cidade||l.nome}','${inputId}','${sugId}')">
-          <strong>${l.iataCode}</strong> — ${l.cidade||l.nome} (${l.pais||''}) <em>${l.tipo}</em>
-        </div>`).join('');
+      el.innerHTML = locais.map(l => {
+        const nomeAeroporto = l.nomeAeroporto || l.nome || '';
+        const label = nomeAeroporto ? `${l.iataCode} — ${l.cidade||l.nome} (${nomeAeroporto})` : `${l.iataCode} — ${l.cidade||l.nome} (${l.pais||''})`;
+        return `<div class="amadeus-sug-item" onclick="selecionarIATA('${l.iataCode}','${(l.cidade||l.nome).replace(/'/g,'\\&apos;')}','${nomeAeroporto.replace(/'/g,'\\&apos;')}','${inputId}','${sugId}')">
+          <strong>${l.iataCode}</strong> — ${l.cidade||l.nome}${nomeAeroporto?' <em style="font-size:11px;color:#888">('+nomeAeroporto+')</em>':''}
+        </div>`;
+      }).join('');
       el.classList.remove('hidden');
     })
-    .withFailureHandler(()=>{})
+    .withFailureHandler(()=>{ if (spinnerEl) spinnerEl.style.display = 'none'; })
     .doPost_proxy({ acao: 'buscarLocaisAmadeus', termo });
 }
 
-function selecionarIATA(iata, cidade, inputId, sugId) {
+function selecionarIATA(iata, cidade, nomeAeroporto, inputId, sugId) {
   document.getElementById(inputId).value = cidade;
   document.getElementById(sugId).classList.add('hidden');
-  if (inputId === 'amadeusOrigem') { estado.iataOrigem = iata; document.getElementById('amadeusOrigemIATA').textContent = iata; }
-  else { estado.iataDestino = iata; document.getElementById('amadeusDestinoIATA').textContent = iata; }
+  const badge = nomeAeroporto ? `${iata} (${nomeAeroporto})` : iata;
+  if (inputId === 'amadeusOrigem') {
+    estado.iataOrigem = iata;
+    document.getElementById('amadeusOrigemIATA').textContent = badge;
+    document.getElementById('amadeusOrigemIATA').title = `${iata} — ${cidade}${nomeAeroporto?' / '+nomeAeroporto:''}`;
+  } else {
+    estado.iataDestino = iata;
+    document.getElementById('amadeusDestinoIATA').textContent = badge;
+    document.getElementById('amadeusDestinoIATA').title = `${iata} — ${cidade}${nomeAeroporto?' / '+nomeAeroporto:''}`;
+  }
 }
 
 function selecionarTrecho(trecho) {
@@ -970,7 +1013,7 @@ function renderizarVoos(opcoes, trecho) {
       <div style="font-size:13px;color:#555;margin-top:4px">
         ${fmt(v.saida)} → ${fmt(v.chegada)} | ${fDur(v.duracao)}
         | ${v.paradas===0?'<span style="color:#2e7d32">direto</span>':v.paradas+' parada(s)'}
-        | ${v.bagagem?'✅ bagagem':'❌ sem bagagem'} | ${v.classe}
+        | ${v.classe}
       </div>
     </div>`).join('');
   el.classList.remove('hidden');
@@ -1079,13 +1122,94 @@ function alertar(msg) { alert(msg); }
 
 // Gatilho para calcular distância ao alterar campos de origem/destino
 document.addEventListener('DOMContentLoaded', () => {
-  ['origemCidade','origemEstado','destino','estado'].forEach(id => {
+  // Inicializa dropdowns de estado
+  _initEstados();
+  // L3-B: Reposiciona blocoAmadeus para após blocoAereoOpcoes (voo e hotst na ordem certa)
+  const _blocoAereo   = document.getElementById('blocoAereoOpcoes');
+  const _blocoAmadeus = document.getElementById('blocoAmadeus');
+  if (_blocoAereo && _blocoAmadeus && _blocoAereo.parentNode) {
+    _blocoAereo.parentNode.insertBefore(_blocoAmadeus, _blocoAereo.nextSibling);
+  }
+  // Text inputs: evento 'input'
+  ['origemCidade', 'destino'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('input', tentarCalcularDistancia);
+  });
+  // Selects de estado: evento 'change'
+  ['origemEstado', 'estado'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', tentarCalcularDistancia);
+  });
+  // Checkboxes período rodoviário: disparam alerta leito
+  document.querySelectorAll('input[name="periodoRodov"]').forEach(cb => {
+    cb.addEventListener('change', verificarAlertoLeito);
   });
 });
 
 function doPost_proxy(payload) { /* server-side only */ }
+
+// ── Cidades por estado (L4-A) ────────────────────────────────
+const ESTADOS_BR = [
+  'AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT',
+  'PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO'
+];
+const CIDADES_BR = {
+  SP: ['São Paulo','Campinas','Santo André','São Bernardo do Campo','Guarulhos','Osasco','Ribeirão Preto','Sorocaba','São José dos Campos','Santos','Mogi das Cruzes','Piracicaba','Bauru','Limeira','Jundiaí','Taubaté','Suzano','Carapicuíba'],
+  RJ: ['Rio de Janeiro','Niterói','Duque de Caxias','Nova Iguaçu','São Gonçalo','Belford Roxo','Petrópolis','Volta Redonda','Campos dos Goytacazes','Macaé'],
+  MG: ['Belo Horizonte','Uberlândia','Contagem','Juiz de Fora','Betim','Montes Claros','Ribeirão das Neves','Uberaba','Governador Valadares','Ipatinga'],
+  BA: ['Salvador','Feira de Santana','Vitória da Conquista','Camaçari','Itabuna','Juazeiro','Lauro de Freitas','Ilhéus','Jequié','Alagoinhas'],
+  PR: ['Curitiba','Londrina','Maringá','Ponta Grossa','Cascavel','São José dos Pinhais','Foz do Iguaçu','Colombo','Guarapuava','Paranaguá'],
+  RS: ['Porto Alegre','Caxias do Sul','Pelotas','Canoas','Santa Maria','Gravataí','Viamão','Novo Hamburgo','São Leopoldo','Rio Grande'],
+  SC: ['Florianópolis','Joinville','Blumenau','São José','Chapecó','Criciúma','Itajaí','Jaraguá do Sul','Palhoça','Lages'],
+  GO: ['Goiânia','Aparecida de Goiânia','Anápolis','Rio Verde','Luziânia','Águas Lindas de Goiás','Valparaíso de Goiás','Trindade','Formosa','Novo Gama'],
+  PE: ['Recife','Olinda','Caruaru','Jaboatão dos Guararapes','Paulista','Petrolina','Cabo de Santo Agostinho','Camaragibe','Garanhuns','Vitória de Santo Antão'],
+  CE: ['Fortaleza','Caucaia','Juazeiro do Norte','Maracanaú','Sobral','Crato','Itapipoca','Maranguape','Iguatu','Quixadá'],
+  AM: ['Manaus','Parintins','Itacoatiara','Manacapuru','Coari','Tefé','Tabatinga','Maués','Humaitá','Iranduba'],
+  PA: ['Belém','Ananindeua','Santarém','Marabá','Castanhal','Parauapebas','Altamira','Itaituba','Bragança','Cametá'],
+  MA: ['São Luís','Imperatriz','São José de Ribamar','Timon','Caxias','Codó','Açailândia','Bacabal','Balsas','Paço do Lumiar'],
+  DF: ['Brasília','Ceilândia','Taguatinga','Samambaia','Planaltina','Águas Claras','Gama','Sobradinho','Recanto das Emas','Guará'],
+  ES: ['Vitória','Serra','Vila Velha','Cariacica','Cachoeiro de Itapemirim','Linhares','São Mateus','Colatina','Guarapari','Aracruz'],
+  MT: ['Cuiabá','Várzea Grande','Rondonópolis','Sinop','Tangará da Serra','Cáceres','Sorriso','Lucas do Rio Verde','Barra do Garças','Primavera do Leste'],
+  MS: ['Campo Grande','Dourados','Três Lagoas','Corumbá','Grande Dourados','Ponta Porã','Naviraí','Nova Andradina','Aquidauana','Sidrolândia'],
+  RN: ['Natal','Mossoró','Caicó','Parnamirim','São Gonçalo do Amarante','Ceará-Mirim','Macaíba','Currais Novos','Santa Cruz','Pau dos Ferros'],
+  AL: ['Maceió','Arapiraca','Palmeira dos Índios','Rio Largo','Penedo','União dos Palmares','São Miguel dos Campos','Delmiro Gouveia','Coruripe','Jacobina'],
+  PB: ['João Pessoa','Campina Grande','Santa Rita','Patos','Bayeux','Sousa','Cajazeiras','Cabedelo','Guarabira','Queimadas'],
+  PI: ['Teresina','Parnaíba','Picos','Piripiri','Floriano','Campo Maior','Barras','Oeiras','Esperantina','Pedro II'],
+  SE: ['Aracaju','Nossa Senhora do Socorro','Lagarto','Itabaiana','São Cristóvão','Estância','Tobias Barreto','Simão Dias','Propriá','Itaporanga d\'Ajuda'],
+  RO: ['Porto Velho','Ji-Paraná','Ariquemes','Vilhena','Cacoal','Jaru','Rolim de Moura','Guajará-Mirim','Ouro Preto do Oeste','Espigão do Oeste'],
+  TO: ['Palmas','Araguaína','Gurupi','Porto Nacional','Paraíso do Tocantins','Colinas do Tocantins','Guaraí','Tocantinópolis','Miracema do Tocantins','Dianópolis'],
+  AC: ['Rio Branco','Cruzeiro do Sul','Sena Madureira','Tarauacá','Feijó','Brasileia','Epitaciolândia','Mâncio Lima','Plácido de Castro','Rodrigues Alves'],
+  AP: ['Macapá','Santana','Laranjal do Jari','Oiapoque','Mazagão','Porto Grande','Tartarugalzinho','Pedra Branca do Amapari','Ferreira Gomes','Cutias'],
+  RR: ['Boa Vista','Caracaraí','Rorainópolis','Alto Alegre','Mucajaí','Normandia','Cantá','Bonfim','Amajari','Pacaraima'],
+};
+
+function _initEstados() {
+  ['origemEstado', 'estado'].forEach(selId => {
+    const sel = document.getElementById(selId);
+    if (!sel) return;
+    ESTADOS_BR.forEach(uf => {
+      const opt = document.createElement('option');
+      opt.value = uf; opt.textContent = uf;
+      sel.appendChild(opt);
+    });
+  });
+}
+
+function carregarCidades(estadoSelId, cidadeInputId) {
+  const uf = document.getElementById(estadoSelId).value;
+  const dl = document.getElementById(cidadeInputId === 'origemCidade' ? 'listOrigemCidades' : 'listDestinoCidades');
+  const input = document.getElementById(cidadeInputId);
+  if (!dl) return;
+  dl.innerHTML = '';
+  if (!uf || !CIDADES_BR[uf]) return;
+  CIDADES_BR[uf].forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c;
+    dl.appendChild(opt);
+  });
+  if (input) input.value = '';  // Limpa cidade ao trocar estado
+  tentarCalcularDistancia();
+}
 </script>
 </body>
 </html>

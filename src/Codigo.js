@@ -132,7 +132,7 @@ function doPost_proxy(payload) {
     buscarVoosAmadeus:     () => buscarVoosAmadeus(payload.origem, payload.destino, payload.dataIda, payload.dataVolta || null, payload.adultos),
     buscarHoteisAmadeus:   () => buscarHoteisAmadeus(payload.cityCode, payload.checkin, payload.checkout, payload.adultos),
     // Auth
-    cadastrarUsuario:      () => cadastrarUsuario(payload.cpf, payload.telefone, payload.rg, payload.dataNascimento),
+    cadastrarUsuario:      () => cadastrarUsuario(payload.cpf, payload.telefone, payload.rg, payload.dataNascimento, payload.ehPCD, payload.ehSono, payload.outraCondicao, payload.laudoPCDBase64, payload.laudoPCDNome),
     loginUsuario:          () => loginUsuario(payload.email, payload.senha),
     alterarSenha:          () => alterarSenha(payload.token, payload.novaSenha, payload.confirmacao),
     carregarPerfilUsuario: () => carregarPerfilUsuario(payload.cpf),
