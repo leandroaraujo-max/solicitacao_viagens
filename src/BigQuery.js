@@ -64,14 +64,19 @@ function consultarColaboradorBQ(cpfOuMatricula) {
   const tA  = cfg.BQ_TABLE_ASSIGNEE;
   const tF  = cfg.BQ_TABLE_FUNCIONARIOS;
 
-  // C1: detecta se é CPF (11 dígitos) ou matrícula (outros comprimentos)
+  // Validação de configuração — falha com mensagem clara
+  if (!cfg.BQ_PROJECT_ID) throw new Error('[BQ] Propriedade BQ_PROJECT_ID não configurada no Script.');
+  if (!tA)                throw new Error('[BQ] Propriedade BQ_TABLE_ASSIGNEE não configurada no Script.');
+  if (!tF)                throw new Error('[BQ] Propriedade BQ_TABLE_FUNCIONARIOS não configurada no Script.');
+
+  // Detecta se é CPF (11 dígitos) ou matrícula
   const eCPF   = /^\d{11}$/.test(cpfOuMatricula);
   // Aceita CPF com ou sem zero inicial (Sheets pode ter gravado como número)
   const filtro = eCPF
     ? `(t1.custom2 = '${cpfOuMatricula}' OR t1.custom2 = '${cpfOuMatricula.replace(/^0+/,'')}' OR LPAD(t1.custom2,11,'0') = '${cpfOuMatricula}')`
     : `t1.CUSTOM1 = '${cpfOuMatricula}'`;
 
-  Logger.log(`[BQ] consultarColaboradorBQ: chave=${cpfOuMatricula} eCPF=${eCPF}`);
+  Logger.log(`[BQ] chave=${cpfOuMatricula} eCPF=${eCPF} project=${cfg.BQ_PROJECT_ID} tableA=${tA}`);
 
   const query = `
     SELECT DISTINCT
@@ -93,7 +98,6 @@ function consultarColaboradorBQ(cpfOuMatricula) {
       CONCAT(g1.first_name, ' ', g1.last_name)       AS aprovador_n1_nome,
       g1.email                                       AS aprovador_n1_email,
       g1.id                                          AS aprovador_n1_id,
-      -- C2: situação do N1 para detectar férias
       fg1.SITUACAO                                   AS aprovador_n1_situacao,
       CONCAT(g2.first_name, ' ', g2.last_name)       AS aprovador_n2_nome,
       g2.email                                       AS aprovador_n2_email
@@ -113,46 +117,40 @@ function consultarColaboradorBQ(cpfOuMatricula) {
   `;
 
   try {
-    // Jobs.insert é assíncrono — mais robusto que Jobs.query com timeoutMs
-    const job = BigQuery.Jobs.insert(
-      { configuration: { query: { query, useLegacySql: false } } },
+    // Jobs.query síncrono com 20s — suficiente para query simples com LIMIT 1
+    let response = BigQuery.Jobs.query(
+      { query, useLegacySql: false, timeoutMs: 20000 },
       cfg.BQ_PROJECT_ID
     );
-    const jobId = job.jobReference.jobId;
-    Logger.log(`[BQ] Job inserido: ${jobId}`);
+    Logger.log(`[BQ] Jobs.query: jobComplete=${response.jobComplete} jobId=${response.jobReference && response.jobReference.jobId}`);
 
-    // Polling com até 30s (10 tentativas × 3s)
-    let resultPage;
-    let tentativas = 0;
-    const maxTentativas = 10;
-    while (tentativas < maxTentativas) {
-      Utilities.sleep(3000);
-      tentativas++;
-      resultPage = BigQuery.Jobs.getQueryResults(cfg.BQ_PROJECT_ID, jobId, { timeoutMs: 3000 });
-      Logger.log(`[BQ] Tentativa ${tentativas}: jobComplete=${resultPage.jobComplete}`);
-      if (resultPage.jobComplete) break;
+    // Se não completou em 20s, aguarda mais 10s via poll
+    if (!response.jobComplete && response.jobReference) {
+      const jobId = response.jobReference.jobId;
+      Logger.log(`[BQ] Job incompleto — polling jobId=${jobId}`);
+      Utilities.sleep(5000);
+      response = BigQuery.Jobs.getQueryResults(cfg.BQ_PROJECT_ID, jobId, { timeoutMs: 10000 });
+      Logger.log(`[BQ] Poll: jobComplete=${response.jobComplete}`);
     }
 
-    if (!resultPage || !resultPage.jobComplete) {
-      Logger.log(`[BQ] timeout após ${tentativas} tentativas para ${cpfOuMatricula}`);
-      throw new Error('Timeout ao aguardar resposta do BigQuery.');
+    if (!response.jobComplete) {
+      throw new Error('Timeout: consulta BQ demorou mais que 30s.');
     }
 
-    if (!resultPage.rows || resultPage.rows.length === 0) {
-      Logger.log(`[BQ] nenhum resultado para ${cpfOuMatricula}`);
+    if (!response.rows || response.rows.length === 0) {
+      Logger.log(`[BQ] Nenhum resultado para ${cpfOuMatricula}`);
       return null;
     }
 
-    const schema = resultPage.schema.fields.map(f => f.name);
-    const row    = resultPage.rows[0].f.map(c => c.v);
-    Logger.log(`[BQ] resultado: ${JSON.stringify(row.slice(0,4))}`);
+    const schema = response.schema.fields.map(f => f.name);
+    const row    = response.rows[0].f.map(c => c.v);
+    Logger.log(`[BQ] OK: nome=${row[2]} cpf=${row[1]}`);
     return linhaParaObjeto(schema, row);
 
   } catch (err) {
-    // Loga detalhes completos para diagnóstico
-    Logger.log(`[ERRO BQ] message=${err.message}`);
-    try { Logger.log(`[ERRO BQ] details=${JSON.stringify(err)}`); } catch(_) {}
-    throw new Error(`Falha ao consultar o BigQuery: ${err.message}`);
+    Logger.log(`[ERRO BQ] ${err.message}`);
+    try { Logger.log(`[ERRO BQ] stack: ${err.stack}`); } catch(_) {}
+    throw new Error(`Falha BQ: ${err.message}`);
   }
 }
 
@@ -174,13 +172,6 @@ function extrairCadeiaAprovacao(cpfOuMatricula) {
 /**
  * Grava ou atualiza viajante na aba Viajantes (cache).
  * Calcula categorização automática antes de gravar.
- *
- * Mapeamento dos campos reais do BQ:
- *   dadosBQ.cargo          → cargo do colaborador (ex: "Diretor", "Analista")
- *   dadosBQ.cod_categoria  → código de categoria salarial
- *   dadosBQ.superior_id    → id (INTEGER) do gestor direto no assignee
- *   dadosBQ.aprovador_n1_* → dados pré-resolvidos pelo JOIN no BQ
- *   dadosBQ.aprovador_n2_* → dois níveis acima
  */
 function criarOuAtualizarViajante(dadosBQ) {
   const cfg = getConfig();
@@ -191,7 +182,6 @@ function criarOuAtualizarViajante(dadosBQ) {
   let sheet = ss.getSheetByName('Viajantes');
   if (!sheet) {
     sheet = ss.insertSheet('Viajantes');
-    // B3-fix: header em sincronia com inicializarPlanilha — inclui 'cpf' após 'matricula'
     sheet.appendRow([
       'matricula','cpf','nome','cargo','cod_categoria','filial','centro_custo',
       'cod_centro_custo','empresa','email','user_name',
@@ -254,4 +244,74 @@ function linhaParaObjeto(header, linha) {
   const obj = {};
   header.forEach((col, i) => { obj[col] = linha[i]; });
   return obj;
+}
+
+// ════════════════════════════════════════════════════════════
+// DIAGNÓSTICO BQ — Execute direto no editor GAS para depurar
+// ════════════════════════════════════════════════════════════
+/**
+ * Testa a conexão + query ao BigQuery isoladamente.
+ * Execução: editor GAS → selecionar TESTE_diagnosticoBQ → Executar
+ *
+ * Leia o resultado em: Execuções → selecionar a execução → ver Logs
+ */
+function TESTE_diagnosticoBQ() {
+  const MEU_CPF = '08681108689'; // CPF do Leandro — altere se necessário
+
+  Logger.log('=== DIAGNÓSTICO BQ ===');
+
+  // 1. Verifica properties
+  const cfg = getConfig();
+  Logger.log(`BQ_PROJECT_ID       = ${cfg.BQ_PROJECT_ID       || '❌ NÃO CONFIGURADO'}`);
+  Logger.log(`BQ_TABLE_ASSIGNEE   = ${cfg.BQ_TABLE_ASSIGNEE   || '❌ NÃO CONFIGURADO'}`);
+  Logger.log(`BQ_TABLE_FUNCIONARIOS = ${cfg.BQ_TABLE_FUNCIONARIOS || '❌ NÃO CONFIGURADO'}`);
+
+  if (!cfg.BQ_PROJECT_ID || !cfg.BQ_TABLE_ASSIGNEE || !cfg.BQ_TABLE_FUNCIONARIOS) {
+    Logger.log('❌ ABORTADO: Properties BQ incompletas. Configure no editor GAS → Configurações do Projeto → Propriedades do script.');
+    return;
+  }
+
+  // 2. Testa query mínima (sem filtro de pessoa)
+  Logger.log('--- Teste 1: query mínima de 1 linha ---');
+  try {
+    const r1 = BigQuery.Jobs.query(
+      { query: `SELECT 1 AS ok`, useLegacySql: false, timeoutMs: 10000 },
+      cfg.BQ_PROJECT_ID
+    );
+    Logger.log(`SELECT 1: jobComplete=${r1.jobComplete} rows=${r1.rows ? r1.rows.length : 'N/A'}`);
+    Logger.log('✅ Conectividade BQ OK');
+  } catch(e1) {
+    Logger.log(`❌ Falha no teste de conectividade: ${e1.message}`);
+    Logger.log('Causa provável: permissão IAM ausente (bigquery.jobs.create no projeto ' + cfg.BQ_PROJECT_ID + ')');
+    return;
+  }
+
+  // 3. Testa acesso à tabela assignee
+  Logger.log('--- Teste 2: acesso à tabela assignee ---');
+  try {
+    const r2 = BigQuery.Jobs.query(
+      { query: `SELECT id, email FROM \`${cfg.BQ_TABLE_ASSIGNEE}\` WHERE active = TRUE LIMIT 1`, useLegacySql: false, timeoutMs: 15000 },
+      cfg.BQ_PROJECT_ID
+    );
+    Logger.log(`assignee: jobComplete=${r2.jobComplete} rows=${r2.rows ? r2.rows.length : 'N/A'}`);
+    if (r2.rows && r2.rows.length > 0) Logger.log('✅ Tabela assignee OK: ' + JSON.stringify(r2.rows[0]));
+    else Logger.log('⚠ Tabela assignee OK mas sem linhas');
+  } catch(e2) {
+    Logger.log(`❌ Falha na tabela assignee: ${e2.message}`);
+  }
+
+  // 4. Testa busca pelo CPF
+  Logger.log(`--- Teste 3: busca pelo CPF ${MEU_CPF} ---`);
+  try {
+    const resultado = consultarColaboradorBQ(MEU_CPF);
+    if (resultado) {
+      Logger.log(`✅ Colaborador encontrado: nome=${resultado.nome} email=${resultado.email} cargo=${resultado.cargo}`);
+    } else {
+      Logger.log(`⚠ CPF ${MEU_CPF} não encontrado nas tabelas BQ (colaborador inativo ou CPF incorreto)`);
+    }
+  } catch(e3) {
+    Logger.log(`❌ Erro na busca por CPF: ${e3.message}`);
+  }
+
+  Logger.log('=== FIM DIAGNÓSTICO ===');
 }
