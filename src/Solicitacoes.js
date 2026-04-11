@@ -73,6 +73,9 @@ function submeterSolicitacao(payload) {
     // A4
     payload.aereo_periodo_preferido || '',
     payload.aereo_tipo_trecho       || '',
+    // L2-A/L3-E: assento especial e motivo
+    payload.assento_especial        || '',
+    payload.motivo_assento_especial || '',
     // A5 — rodoviário
     payload.rodov_data_ida          || '',
     payload.rodov_data_volta        || '',
@@ -219,6 +222,10 @@ function submeterCotacaoAgencia(payload) {
     campos[`${prefixo}_aero_origem`]     = payload.aereo.origem         || '';
     campos[`${prefixo}_aero_destino`]    = payload.aereo.destino        || '';
     campos[`${prefixo}_aero_classe`]     = payload.aereo.classe         || '';
+    // L2-A: armazena tarifa concatenada com a classe (ex: 'Econômica / Flex')
+    if (payload.aereo.tarifa) {
+      campos[`${prefixo}_aero_classe`] = (campos[`${prefixo}_aero_classe`] + ' / ' + payload.aereo.tarifa).trim();
+    }
     campos[`${prefixo}_aero_bagagem`]    = payload.aereo.bagagem        || false;
     campos[`${prefixo}_aero_conexao`]    = payload.aereo.conexao        || false;
     campos[`${prefixo}_aero_escala`]     = payload.aereo.escala         || '';

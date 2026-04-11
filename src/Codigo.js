@@ -267,6 +267,8 @@ function inicializarPlanilha() {
       'bagagem_extra',
       // A4 — período/tipo aéreo
       'aereo_periodo_preferido', 'aereo_tipo_trecho',
+      // L2-A / L3-E: assento especial solicitado pelo viajante
+      'assento_especial', 'motivo_assento_especial',
       // A5 — rodoviário
       'rodov_data_ida', 'rodov_data_volta', 'rodov_periodo_preferido', 'rodov_tipo_trecho', 'rodov_tipo_onibus',
       // A6 — carro completo

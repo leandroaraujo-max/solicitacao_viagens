@@ -81,11 +81,13 @@ function buscarLocaisAmadeus(termo) {
       .slice(0, 8)
       .map(function(l) {
         return {
-          iataCode: l.iata_code,
-          nome:     l.name,
-          cidade:   l.city_name || l.name,
-          pais:     l.country_name || '',
-          tipo:     l.type === 'airport' ? 'AIRPORT' : 'CITY',
+          iataCode:      l.iata_code,
+          nome:          l.name,
+          cidade:        l.city_name || l.name,
+          pais:          l.country_name || '',
+          tipo:          l.type === 'airport' ? 'AIRPORT' : 'CITY',
+          // L2-B: nome do aeroporto separado da cidade para exibição no autocomplete
+          nomeAeroporto: l.type === 'airport' ? l.name : '',
         };
       });
     return { sucesso: true, locais: locais };
@@ -131,6 +133,14 @@ function _resolverIATA(valor) {
  * @param {string} [dataVolta]  — 'YYYY-MM-DD' (opcional)
  * @param {number} [adultos=1]
  */
+// L2-B: mapa de códigos IATA → nome padronizado das companhias permitidas
+const CIA_NOMES = {
+  'AD': 'Azul',
+  'G3': 'GOL',
+  'LA': 'LATAM',
+  'JJ': 'LATAM',
+};
+
 function buscarVoosAmadeus(origem, destino, dataIda, dataVolta, adultos) {
   adultos = adultos || 1;
   try {
@@ -185,7 +195,8 @@ function buscarVoosAmadeus(origem, destino, dataIda, dataVolta, adultos) {
         return {
           id:          offer.id,
           cia_codigo:  cia.iata_code || '',
-          cia_nome:    cia.name      || '',
+          // L2-B: usa CIA_NOMES para nome padronizado; fallback para nome da API
+          cia_nome:    CIA_NOMES[cia.iata_code] || CIA_NOMES[mktCia.iata_code] || cia.name || mktCia.name || '',
           numero_voo:  (mktCia.iata_code || '') + (seg0.marketing_carrier_flight_number || ''),
           origem:      seg0.origin.iata_code,
           destino:     segLast.destination.iata_code,

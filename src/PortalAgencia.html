@@ -52,13 +52,22 @@
     <!-- Aéreo -->
     <div id="secaoAereo" class="card card-inner hidden">
       <h3>✈ Cotação Aéreo</h3>
+
+      <!-- L2-A: alerta visibílé somente em viagens emergenciais -->
+      <div id="alertaEmergencial" class="hidden" style="background:#ffebee;border-left:4px solid #e53935;padding:10px 14px;border-radius:6px;font-size:12px;color:#555;margin-bottom:12px">
+        ⚠ <strong>Viagem emergencial</strong> — recomenda-se tarifa <strong>Flex</strong> ou superior para facilitar cancelamentos e alterações de última hora.
+      </div>
+
       <div class="grid-2">
         <div class="field-group">
           <label>Companhia Aérea <span class="req">*</span></label>
+          <!-- L2-B: apenas companhias permitidas pela política (Azul, GOL, LATAM) -->
           <select id="aeroCia">
             <option value="">Selecione...</option>
-            <option>LATAM</option><option>GOL</option><option>Azul</option>
-            <option>Passaredo</option><option>Outro</option>
+            <option value="LATAM">LATAM</option>
+            <option value="GOL">GOL</option>
+            <option value="Azul">Azul</option>
+            <option value="Outro">Outro (sob aprovação)</option>
           </select>
         </div>
         <div class="field-group">
@@ -93,6 +102,18 @@
             <option>Econômica</option><option>Executiva</option>
           </select>
         </div>
+        <!-- L2-A: tipo de tarifa (impacta cancelamento/alteração) -->
+        <div class="field-group">
+          <label>Tipo de Tarifa <span class="req">*</span></label>
+          <select id="aereoTarifa">
+            <option value="Basica">Básica / Light (sem cancelamento)</option>
+            <option value="Flex" selected>Flex (cancelamento gratuito)</option>
+            <option value="Plus">Plus (bagagem + cancelamento)</option>
+            <option value="Business">Business Flex</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid-2">
         <div class="field-group">
           <label>Bagagem Incluída?</label>
           <div class="radio-group">
@@ -100,14 +121,14 @@
             <label class="radio-opt"><input type="radio" name="aeroBagagem" value="false" checked> Não</label>
           </div>
         </div>
-      </div>
-      <div class="field-group">
-        <label>Possui conexão?</label>
-        <div class="radio-group">
-          <label class="radio-opt"><input type="radio" name="aeroConexao" value="true"  onchange="toggleConexao(true)">  Sim</label>
-          <label class="radio-opt"><input type="radio" name="aeroConexao" value="false" onchange="toggleConexao(false)" checked> Não</label>
+        <div class="field-group">
+          <label>Possui conexão?</label>
+          <div class="radio-group">
+            <label class="radio-opt"><input type="radio" name="aeroConexao" value="true"  onchange="toggleConexao(true)">  Sim</label>
+            <label class="radio-opt"><input type="radio" name="aeroConexao" value="false" onchange="toggleConexao(false)" checked> Não</label>
+          </div>
+          <input type="text" id="aeroEscala" class="hidden" placeholder="Aeroporto de escala (IATA)" maxlength="3" style="margin-top:6px;text-transform:uppercase" />
         </div>
-        <input type="text" id="aeroEscala" class="hidden" placeholder="Aeroporto de escala (IATA)" maxlength="3" style="margin-top:6px;text-transform:uppercase" />
       </div>
       <div class="grid-2">
         <div class="field-group">
@@ -423,13 +444,123 @@ function exibirSecoesServico(req) {
     const secaoRodov = document.getElementById('secaoRodov');
     if (secaoRodov) {
       secaoRodov.classList.remove('hidden');
-      // Preenche campos read-only com dados do pedido
       const rdOrig  = document.getElementById('rodovOrigemInfo');
       const rdDest  = document.getElementById('rodovDestinoInfo');
       if (rdOrig) rdOrig.textContent = req.origem_cidade || '—';
       if (rdDest) rdDest.textContent = req.destino_cidade || '—';
     }
   }
+
+  // L2-D: auto-preenchimento com dados da solicitação ────────────────────────
+
+  // Aéreo
+  if (tipos.includes('Aereo')) {
+    // L2-A: exibe alerta se viagem emergencial
+    if (req.classificacao_aereo === 'Emergencial') {
+      const alerta = document.getElementById('alertaEmergencial');
+      if (alerta) alerta.classList.remove('hidden');
+    }
+    // L2-B: pré-seleciona cia a partir da preferência do viajante
+    const ciaMap = { 'LATAM': 'LATAM', 'Azul': 'Azul', 'GOL': 'GOL',
+                     'LA': 'LATAM', 'AD': 'Azul', 'G3': 'GOL', 'JJ': 'LATAM' };
+    if (req.preferencia_voo_cia) {
+      const cia = ciaMap[req.preferencia_voo_cia] || req.preferencia_voo_cia;
+      const sel = document.getElementById('aeroCia');
+      if (sel) sel.value = cia;
+    }
+    if (req.preferencia_voo_numero) {
+      const el = document.getElementById('aeroVoo');
+      if (el) el.value = req.preferencia_voo_numero;
+    }
+    // Pré-preenche data/hora de saída e chegada a partir da preferência
+    if (req.preferencia_voo_saida) {
+      const el = document.getElementById('aeroSaida');
+      if (el) el.value = req.preferencia_voo_saida.substring(0, 16);
+    } else if (req.data_ida) {
+      // fallback: data de ida sem horário definido
+      const el = document.getElementById('aeroSaida');
+      if (el) el.value = req.data_ida.substring(0, 10) + 'T08:00';
+    }
+    if (req.preferencia_voo_chegada) {
+      const el = document.getElementById('aeroChegada');
+      if (el) el.value = req.preferencia_voo_chegada.substring(0, 16);
+    }
+    // Validade da cotação: 48h a partir de agora por padrão
+    const val48h = new Date(Date.now() + 48 * 3600 * 1000);
+    const el = document.getElementById('aeroValidade');
+    if (el && !el.value) {
+      el.value = val48h.getFullYear() + '-' +
+        String(val48h.getMonth()+1).padStart(2,'0') + '-' +
+        String(val48h.getDate()).padStart(2,'0') + 'T' +
+        String(val48h.getHours()).padStart(2,'0') + ':' +
+        String(val48h.getMinutes()).padStart(2,'0');
+    }
+    mostrarAvisoPrefill('secaoAereo');
+  }
+
+  // Hotel
+  if (tipos.includes('Hospedagem')) {
+    if (req.data_ida)   {
+      const ci = document.getElementById('hotelCheckin');
+      if (ci) ci.value = req.data_ida.substring(0, 10);
+    }
+    if (req.data_volta) {
+      const co = document.getElementById('hotelCheckout');
+      if (co) { co.value = req.data_volta.substring(0, 10); calcularDiarias(); }
+    }
+    // Pré-preenche hotel de preferência se informado
+    if (req.preferencia_hotel_nome) {
+      const elNome = document.getElementById('hotelNome');
+      if (elNome) elNome.value = req.preferencia_hotel_nome;
+      if (req.preferencia_hotel_estrelas) {
+        const elCat = document.getElementById('hotelCategoria');
+        if (elCat) elCat.value = req.preferencia_hotel_estrelas + ' ★★★';
+      }
+    }
+    mostrarAvisoPrefill('secaoHospedagem');
+  }
+
+  // Carro
+  if (tipos.includes('Carro')) {
+    if (req.carro_hora_retirada) {
+      const el = document.getElementById('carroRetirada');
+      if (el) el.value = req.carro_hora_retirada.substring(0, 16);
+    }
+    if (req.carro_hora_devolucao) {
+      const el = document.getElementById('carroDevolucao');
+      if (el) el.value = req.carro_hora_devolucao.substring(0, 16);
+    }
+    if (req.carro_cidade_retirada) {
+      const el = document.getElementById('carroLocal');
+      if (el) el.value = req.carro_cidade_retirada;
+    }
+    // Auto-seleciona categoria baseado no perfil do viajante
+    if (req.veiculo_tipo_solicitado) {
+      const cat = document.getElementById('carroCategoria');
+      if (cat) {
+        if (req.veiculo_tipo_solicitado.includes('Automát')) cat.value = 'Intermediário';
+        else if (req.veiculo_tipo_solicitado.includes('Econ')) cat.value = 'Econômico';
+        else if (req.veiculo_tipo_solicitado.includes('Exec')) cat.value = 'Executivo';
+      }
+    }
+    mostrarAvisoPrefill('secaoCarro');
+  }
+}
+
+// L2-D: exibe aviso de pré-preenchimento no topo da seção
+function mostrarAvisoPrefill(secaoId) {
+  const secao = document.getElementById(secaoId);
+  if (!secao) return;
+  // Evita duplicar
+  if (secao.querySelector('.aviso-prefill')) return;
+  const aviso = document.createElement('div');
+  aviso.className = 'aviso-prefill';
+  aviso.style.cssText = 'background:#e8f5e9;border-left:3px solid #43a047;padding:8px 12px;border-radius:6px;font-size:12px;color:#2e7d32;margin-bottom:10px';
+  aviso.innerHTML = '⚡ Campos pré-preenchidos com dados da solicitação. Revise antes de enviar.';
+  // Insere após o h3
+  const h3 = secao.querySelector('h3');
+  if (h3 && h3.nextSibling) secao.insertBefore(aviso, h3.nextSibling);
+  else secao.insertBefore(aviso, secao.firstChild);
 }
 
 // ── Cálculos ──────────────────────────────────────────────────
@@ -481,6 +612,8 @@ function enviarCotacao() {
       origem:     document.getElementById('aeroOrigem')?.value,
       destino:    document.getElementById('aeroDestino')?.value,
       classe:     document.getElementById('aeroClasse')?.value,
+      // L2-A: tipo de tarifa
+      tarifa:     document.getElementById('aereoTarifa')?.value || '',
       bagagem:    document.querySelector('[name="aeroBagagem"]:checked')?.value === 'true',
       conexao:    document.querySelector('[name="aeroConexao"]:checked')?.value === 'true',
       escala:     document.getElementById('aeroEscala')?.value,
