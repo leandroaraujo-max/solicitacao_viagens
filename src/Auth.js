@@ -126,7 +126,7 @@ function loginUsuario(email, senha) {
   const token = Utilities.getUuid();
   CacheService.getScriptCache().put(
     'sess_' + token,
-    JSON.stringify({ cpf: usuario.cpf, email: emailLimpo, nome: usuario.nome || '', trocarSenha: trocarSenha }),
+    JSON.stringify({ cpf: _normCpf(usuario.cpf), email: emailLimpo, nome: usuario.nome || '', trocarSenha: trocarSenha }),
     8 * 60 * 60  // 8 horas
   );
 
@@ -226,6 +226,15 @@ function alterarSenha(token, novaSenha, confirmacao) {
 
   Logger.log('[AUTH] Senha alterada para: ' + sessao.email);
   return { ok: true };
+}
+
+/**
+ * Normaliza CPF para string de 11 dígitos com zero à esquerda.
+ * Necessário porque o Sheets converte strings numéricas em número,
+ * removendo zeros iniciais ao ler com getValues().
+ */
+function _normCpf(v) {
+  return String(v === null || v === undefined ? '' : v).replace(/\D/g, '').padStart(11, '0');
 }
 
 /**
@@ -331,7 +340,9 @@ function _buscarUsuarioPorCPF(sheet, cpf) {
   const hdr   = dados[0];
   const iCPF  = hdr.indexOf('cpf');
   for (let i = 1; i < dados.length; i++) {
-    if (String(dados[i][iCPF] || '').replace(/\D/g,'') === cpf) {
+    // _normCpf normaliza ambos os lados para '0XXXXXXXXXX' (11 dígitos)
+    // evita falha quando Sheets converte a string para número (perde zero inicial)
+    if (_normCpf(dados[i][iCPF]) === _normCpf(cpf)) {
       const obj = linhaParaObjeto(hdr, dados[i]);
       obj._rowIndex = i + 1;
       return obj;
