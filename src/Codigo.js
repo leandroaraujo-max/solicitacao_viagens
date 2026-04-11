@@ -755,28 +755,37 @@ function TESTE_executarFluxo_(MEU_EMAIL) {
 
   const dadosTeste = {
     req_id:                  reqID,
+    cpf_viajante:            '08681108689',
     matricula_viajante:      '156834',
     nome_viajante:           'LEANDRO AUGUSTO DE MELO ARAUJO',
     matricula_operador:      '156834',
     nome_operador:           'LEANDRO AUGUSTO DE MELO ARAUJO',
     via_delegacao:           false,
-    status:                  'Aguardando Cotação',
+    status:                  'Aguardando Aprovação Liderança',
     criado_em:               agora,
     atualizado_em:           agora,
     tipo_servico:            'Aereo,Hospedagem',
     destino_cidade:          'São Paulo',
     destino_estado:          'SP',
+    origem_cidade:           'Franca',
+    origem_estado:           'SP',
     data_ida:                fmtISO(dataIda),
     data_volta:              fmtISO(dataVolta),
     antecedencia_dias:       20,
     classificacao_aereo:     'Comum',
-    motivo_viagem:           '[TESTE] Validação do fluxo completo',
+    motivo_viagem:           '[TESTE] Validação fluxo completo com quarto individual',
     quarto_tipo_solicitado:  'Compartilhado',
     veiculo_tipo_solicitado: 'Econômico',
     email:                   MEU_EMAIL,
     aprovador_n1_email:      MEU_EMAIL,
     aprovador_n1_nome:       'Gestor Teste (Você)',
     aprovador_n1_nivel:      '1',
+    // Exceção de quarto individual por condição de saúde
+    quarto_excecao_saude:    true,
+    excecao_pre_aprovada:    true,
+    excecao_motivo:          'Distúrbio do sono',
+    excecao_cid:             'G47.3',
+    excecao_obs:             '[TESTE] Condição pré-aprovada no cadastro',
   };
   sheet.appendRow(hdr.map(col => (dadosTeste[col] !== undefined ? dadosTeste[col] : '')));
   Logger.log('[TESTE][1/7] ✅ Solicitação criada: ' + reqID);
@@ -784,7 +793,14 @@ function TESTE_executarFluxo_(MEU_EMAIL) {
   // viajante e cadeia usados nas funções de email
   const viajante = {
     nome:                    dadosTeste.nome_viajante,
+    cpf:                     '08681108689',
     email:                   MEU_EMAIL,
+    telefone:                '(31) 08530-3625',
+    rg:                      '14613150',
+    data_nascimento:         '1987-11-20',
+    cargo:                   'Analista de Sistemas Sr',
+    centro_custo:            'TI - Luizalabs',
+    cod_centro_custo:        '40010',
     categoria_hospedagem:    'Compartilhado',
     categoria_veiculo:       'Econômico',
     motivo_categoria_hosp:   'Cargo padrão',
@@ -793,14 +809,21 @@ function TESTE_executarFluxo_(MEU_EMAIL) {
 
   // ── PASSO 2: E-mail de LIDERANÇA → MEU_EMAIL ───────────────
   enviarEmailAprovacaoLideranca(reqID, viajante, dadosTeste, 'Comum', cadeia);
-  Logger.log('[TESTE][2/7] ✅ E-mail LIDERANÇA → ' + MEU_EMAIL);
+  Logger.log('[TESTE][2/8] E-mail LIDERANCA enviado para ' + MEU_EMAIL);
 
-  // ── PASSO 3: E-mails para AGÊNCIAS → MEU_EMAIL (2 e-mails) ─
+  // ── PASSO 3: E-mail PRÉ-APROVAÇÃO SETOR → MEU_EMAIL ────────
   // (simula a liderança clicando em "Aprovar Viagem")
-  dispararEmailAgencias(reqID, viajante, dadosTeste, 'Comum');
-  Logger.log('[TESTE][3/7] ✅ E-mails AGÊNCIAS (Tastur + Kontrip) → ' + MEU_EMAIL);
+  atualizarStatusSolicitacao(reqID, 'Aguardando Pré-aprovação Setor');
+  enviarEmailPreAprovacaoSetor(reqID, getRequisicao(reqID));
+  Logger.log('[TESTE][3/8] E-mail PRE-APROVACAO SETOR enviado para ' + MEU_EMAIL);
 
-  // ── PASSO 4: Cotações simuladas de ambas as agências ────────
+  // ── PASSO 4: E-mails para AGÊNCIAS → MEU_EMAIL (2 e-mails) ─
+  // (simula o setor clicando em "Pré-Aprovar")
+  atualizarStatusSolicitacao(reqID, 'Aguardando Cotação');
+  dispararEmailAgencias(reqID, viajante, dadosTeste, 'Comum');
+  Logger.log('[TESTE][4/8] E-mails AGENCIAS (Tastur + Kontrip) enviados para ' + MEU_EMAIL);
+
+  // ── PASSO 5: Cotações simuladas de ambas as agências ────────
   // Tastur cotou primeiro
   submeterCotacaoAgencia({
     reqID: reqID,
@@ -821,7 +844,7 @@ function TESTE_executarFluxo_(MEU_EMAIL) {
       diaria: 320, total: 1600, categoria: '3 estrelas',
     },
   });
-  Logger.log('[TESTE][4a/7] ✅ Cotação Tastur registrada (status: Cotação Parcial).');
+  Logger.log('[TESTE][5a/8] Cotacao Tastur registrada.');
 
   // Kontrip cotou em seguida → dispara automaticamente enviarEmailAprovacaoSetor → MEU_EMAIL
   submeterCotacaoAgencia({
@@ -843,9 +866,9 @@ function TESTE_executarFluxo_(MEU_EMAIL) {
       diaria: 295, total: 1475, categoria: '3 estrelas',
     },
   });
-  Logger.log('[TESTE][4b/7] ✅ Cotação Kontrip registrada. E-mail SETOR → ' + MEU_EMAIL + ' (status: Pendente Aprovação Setor).');
+  Logger.log('[TESTE][5b/8] Cotacao Kontrip registrada. E-mail SETOR enviado para ' + MEU_EMAIL);
 
-  // ── PASSO 5: Simula aprovação do setor (escolhe Tastur) ─────
+  // ── PASSO 6: Simula aprovação do setor (escolhe Tastur) ─────
   // (simula o setor clicando em "Aprovar Tastur")
   atualizarStatusSolicitacao(reqID, 'Aprovada / Aguardando Voucher');
   registrarAgenciaEscolhida(reqID, 'Tastur');
@@ -854,9 +877,9 @@ function TESTE_executarFluxo_(MEU_EMAIL) {
   notificarAgenciaVencedora(req, 'Tastur');     // EMAIL_TASTUR = MEU_EMAIL → você recebe
   notificarAgenciaPerdedora(req, 'Tastur');     // EMAIL_KONTRIP = MEU_EMAIL → você recebe
   notificarViajanteSolicitacaoAprovada(req, 'Tastur'); // req.email = MEU_EMAIL → você recebe
-  Logger.log('[TESTE][5/7] ✅ E-mails aprovação final (agência vencedora, perdedora, viajante) → ' + MEU_EMAIL);
+  Logger.log('[TESTE][6/8] E-mails aprovacao final (vencedora, perdedora, viajante) enviados para ' + MEU_EMAIL);
 
-  // ── PASSO 6: Log de aprovação (para consistência da sheet) ──
+  // ── PASSO 7: Log de aprovação (para consistência da sheet) ──
   registrarLogAprovacao({
     reqID,
     matriculaViajante:  '156834',
@@ -867,9 +890,9 @@ function TESTE_executarFluxo_(MEU_EMAIL) {
     agenciaEscolhida:   'Tastur',
     tokenUtilizado:     'TESTE-SIMULADO',
   });
-  Logger.log('[TESTE][6/7] ✅ Log de aprovação registrado.');
+  Logger.log('[TESTE][7/8] Log de aprovacao registrado.');
 
-  // ── PASSO 7: Resumo com link do portal para testar o voucher ─
+  // ── PASSO 8: Resumo com link do portal para testar o voucher ─
   const linkPortal = cfg.WEBAPP_URL + '?reqID=' + reqID + '&tipo=agencia&ag=tastur';
   const geradoEm   = Utilities.formatDate(agora, 'America/Sao_Paulo', 'dd/MM/yyyy HH:mm:ss');
 
@@ -885,13 +908,14 @@ function TESTE_executarFluxo_(MEU_EMAIL) {
         + '<div style="background:#fff;padding:22px;border:1px solid #e0e0e0;border-top:none">'
         +   '<p>Todos os e-mails foram enviados para <strong>' + MEU_EMAIL + '</strong>. Verifique sua caixa de entrada — você deve ter recebido:</p>'
         +   '<ol style="line-height:2">'
-        +     '<li>&#x1F4E7; <strong>E-mail de LIDERAN&Ccedil;A</strong> — Aprovar/Reprovar viagem</li>'
-        +     '<li>&#x1F4E7; <strong>E-mail para AG&Ecirc;NCIA TASTUR</strong> — Solicita&ccedil;&atilde;o de cota&ccedil;&atilde;o com link do portal</li>'
-        +     '<li>&#x1F4E7; <strong>E-mail para AG&Ecirc;NCIA KONTRIP</strong> — Solicita&ccedil;&atilde;o de cota&ccedil;&atilde;o com link do portal</li>'
-        +     '<li>&#x1F4E7; <strong>E-mail do SETOR DE VIAGENS</strong> — Tabela comparativa Tastur vs Kontrip + links de aprova&ccedil;&atilde;o</li>'
-        +     '<li>&#x1F4E7; <strong>E-mail TASTUR VENCEDORA</strong> — Cota&ccedil;&atilde;o aprovada + link portal para upload de voucher</li>'
-        +     '<li>&#x1F4E7; <strong>E-mail KONTRIP (perdedora)</strong> — Cota&ccedil;&atilde;o n&atilde;o selecionada</li>'
-        +     '<li>&#x1F4E7; <strong>E-mail VIAJANTE</strong> — Confirma&ccedil;&atilde;o que a viagem foi aprovada</li>'
+        +     '<li><strong>LIDERANCA</strong> — Aprovar/Reprovar viagem (com banner quarto individual)</li>'
+        +     '<li><strong>PRE-APROVACAO SETOR</strong> — Setor valida antes de acionar agencias (com banner quarto individual)</li>'
+        +     '<li><strong>AGENCIA TASTUR</strong> — Solicitacao de cotacao com link do portal</li>'
+        +     '<li><strong>AGENCIA KONTRIP</strong> — Solicitacao de cotacao com link do portal</li>'
+        +     '<li><strong>SETOR DE VIAGENS</strong> — Tabela comparativa + links de aprovacao</li>'
+        +     '<li><strong>TASTUR VENCEDORA</strong> — Cotacao aprovada + link portal voucher</li>'
+        +     '<li><strong>KONTRIP (perdedora)</strong> — Cotacao nao selecionada</li>'
+        +     '<li><strong>VIAJANTE</strong> — Confirmacao que a viagem foi aprovada</li>'
         +   '</ol>'
         +   '<hr style="border:none;border-top:1px solid #eee;margin:16px 0">'
         +   '<p><strong>Pr&oacute;xima etapa — Portal do Voucher</strong></p>'
@@ -907,7 +931,7 @@ function TESTE_executarFluxo_(MEU_EMAIL) {
         + '</div></div>',
     });
 
-  Logger.log('[TESTE][7/7] ✅ E-mail de resumo enviado.');
-  Logger.log('[TESTE] ✅ CONCLUÍDO — 8 e-mails enviados para ' + MEU_EMAIL + '. Verifique a caixa de entrada.');
+  Logger.log('[TESTE][8/8] E-mail de resumo enviado.');
+  Logger.log('[TESTE] CONCLUIDO — 9 e-mails enviados para ' + MEU_EMAIL + '. Verifique a caixa de entrada.');
 }
 
