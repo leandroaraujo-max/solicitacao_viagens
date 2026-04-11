@@ -532,7 +532,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const inputCPF = document.getElementById('cpfOperador');
     if (inputCPF) {
       inputCPF.value = formatarCPF(SESSION_CPF);
-      inputCPF.closest('.field-group').style.display = 'none'; // oculta o campo CPF (já preenchido)
+      // Oculta apenas a linha do input CPF (não o field-group inteiro que contém radio buttons)
+      const inputRow = inputCPF.closest('.input-row');
+      if (inputRow) inputRow.style.display = 'none';
     }
     // Esconde o botão "Identificar" também
     const btnId = document.getElementById('btnIdentificar');
