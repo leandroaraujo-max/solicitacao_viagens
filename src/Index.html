@@ -661,7 +661,31 @@ function onOperadorEncontrado(viajante) {
   const el = document.getElementById('infoOperador');
   el.innerHTML = `<strong>${viajante.nome}</strong> | ${viajante.cargo} | ${viajante.filial}`;
   el.classList.remove('hidden','erro');
-  if (!estado.ehDelegacao) { estado.viajante = viajante; checarPodeAvancar(); }
+  if (!estado.ehDelegacao) {
+    estado.viajante = viajante;
+    // Verifica condição especial já validada no cadastro (PCD/sono/outra)
+    _verificarCondicaoEspecial(viajante);
+    checarPodeAvancar();
+  }
+}
+
+/**
+ * Verifica se o viajante tem condição especial já cadastrada e com laudo válido.
+ * Se sim, seta condicaoEspecialPreAprovada = true e dispensa novo upload.
+ */
+function _verificarCondicaoEspecial(viajante) {
+  estado.condicaoEspecialPreAprovada = false;
+  const temCondicao = viajante.sono_disturbio || viajante.mobilidade_restrita || viajante.outra_condicao;
+  if (!temCondicao) return;
+  // Verifica se há laudo com validade no futuro (qualquer um dos três)
+  const hoje = new Date();
+  const laudoValido =
+    (viajante.sono_validade     && new Date(viajante.sono_validade) > hoje) ||
+    (viajante.mobilidade_laudo_link && viajante.mobilidade_laudo_link !== '') ||
+    (viajante.outra_laudo_link  && viajante.outra_laudo_link !== '');
+  if (laudoValido) {
+    estado.condicaoEspecialPreAprovada = true;
+  }
 }
 
 function buscarViajante() {
@@ -692,12 +716,9 @@ function onViajanteEncontrado(viajante, delegacao) {
     🚗 Veículo: <strong>${viajante.categoria_veiculo}</strong> — ${viajante.motivo_categoria_veic}`;
   el.classList.remove('hidden');
 
-  // E3: verifica condição especial já validada
-  estado.condicaoEspecialPreAprovada = false;
-  const temCondicao = viajante.sono_disturbio || viajante.mobilidade_restrita || viajante.outra_condicao;
-  const laudoValido = viajante.sono_validade && new Date(viajante.sono_validade) > new Date();
-  if (temCondicao && laudoValido) {
-    estado.condicaoEspecialPreAprovada = true;
+  // E3: verifica condição especial já validada (centralizado)
+  _verificarCondicaoEspecial(viajante);
+  if (estado.condicaoEspecialPreAprovada) {
     const badge = document.createElement('div');
     badge.className = 'info-box';
     badge.style.background = '#e8f5e9';
@@ -853,7 +874,12 @@ function onServicoChange() {
     const bloco = document.getElementById('blocoExcecaoSaude');
     if (bloco) {
       if (estado.condicaoEspecialPreAprovada) {
-        bloco.classList.add('hidden');
+        // Condição já cadastrada com laudo válido — mostra mensagem e oculta form
+        bloco.classList.remove('hidden');
+        bloco.innerHTML = '<div class="info-box" style="background:#e8f5e9;border-left:4px solid #2e7d32;padding:12px">' +
+          '✅ <strong>Condição especial já validada no seu cadastro.</strong><br>' +
+          'O quarto individual será solicitado automaticamente. Não é necessário enviar novo laudo.' +
+          '</div>';
       } else {
         bloco.classList.remove('hidden');
       }
@@ -924,7 +950,8 @@ function renderizarPerfilViajante() {
       ${nascFmt !== '—' ? `<span><label>Nascimento</label>${nascFmt}</span>` : ''}
       <span><label>Cargo</label>${v.cargo}</span>
       <span><label>Filial</label>${v.filial}</span>
-      <span><label>Centro de Custo</label>${v.centro_custo}${v.cod_centro_custo ? ' <em>('+v.cod_centro_custo+')</em>' : ''}</span>
+      <span><label>Centro de Custo</label>${v.centro_custo || '—'}</span>
+      ${v.cod_centro_custo ? `<span><label>Cód. Centro de Custo</label>${v.cod_centro_custo}</span>` : ''}
       <span><label>🏨 Hospedagem</label><strong class="${v.categoria_hospedagem==='Individual'?'txt-individual':''}">${v.categoria_hospedagem}</strong></span>
       <span><label>🚗 Veículo</label><strong>${v.categoria_veiculo}</strong></span>
     </div>`;
