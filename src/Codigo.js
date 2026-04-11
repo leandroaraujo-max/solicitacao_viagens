@@ -155,6 +155,7 @@ function doPost_proxy(payload) {
     return { sucesso: true, dados: dadosLimpos };
   } catch (err) {
     Logger.log(`[ERRO doPost_proxy] acao=${acao} | ${err.message} | ${err.stack}`);
+    logErro(`doPost_proxy:${acao}`, err.message, err.stack);
     return { sucesso: false, erro: err.message || 'Erro desconhecido' };
   }
 }
@@ -168,6 +169,51 @@ function jsonResponse(obj) {
 
 function include(filename) {
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
+}
+
+// ── LockService helper ────────────────────────────────────────
+/**
+ * Executa fn dentro de um lock de script para prevenir escrita concorrente.
+ * Uso: _comLock(() => sheet.appendRow(linha));
+ * @param {Function} fn
+ * @param {number}   [timeoutMs=10000]
+ */
+function _comLock(fn, timeoutMs) {
+  const lock     = LockService.getScriptLock();
+  const acquired = lock.tryLock(timeoutMs || 10000);
+  if (!acquired) throw new Error('Sistema ocupado. Por favor, tente novamente em instantes.');
+  try {
+    return fn();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ── Log de erros na planilha ──────────────────────────────────
+/**
+ * Grava um registro de erro na aba 'Logs' para rastreamento.
+ * Sempre silencioso — nunca propaga exceção.
+ */
+function logErro(contexto, mensagem, stack) {
+  try {
+    const cfg = getConfig();
+    if (!cfg.SHEET_ID) return;
+    const ss  = SpreadsheetApp.openById(cfg.SHEET_ID);
+    let   aba = ss.getSheetByName('Logs');
+    if (!aba) {
+      aba = ss.insertSheet('Logs');
+      aba.appendRow(['timestamp', 'contexto', 'mensagem', 'stack', 'usuario']);
+      aba.setFrozenRows(1);
+    }
+    const usuario = (() => { try { return Session.getActiveUser().getEmail(); } catch(_) { return ''; } })();
+    aba.appendRow([
+      new Date(),
+      String(contexto),
+      String(mensagem || '').substring(0, 500),
+      String(stack    || '').substring(0, 1000),
+      usuario,
+    ]);
+  } catch(_) { /* silencioso */ }
 }
 
 function carregarSolicitacaoAgencia(reqID, agencia) {
@@ -338,6 +384,9 @@ function inicializarPlanilha() {
     'Usuarios': [
       'cpf', 'email', 'nome', 'senha_hash', 'senha_salt',
       'telefone', 'rg', 'data_nascimento', 'status', 'criado_em', 'ultimo_acesso', 'senha_temporaria',
+    ],
+    'Logs': [
+      'timestamp', 'contexto', 'mensagem', 'stack', 'usuario',
     ],
   };
 

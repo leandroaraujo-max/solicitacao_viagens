@@ -131,7 +131,7 @@ function submeterSolicitacao(payload) {
   ];
 
   const sheet = SpreadsheetApp.openById(cfg.SHEET_ID).getSheetByName('Solicitacoes');
-  sheet.appendRow(linha);
+  _comLock(() => sheet.appendRow(linha));
 
   // 8. Tratamento de laudo (se fornecido e não pré-aprovado)
   if (payload.laudoBase64 && payload.laudoNome && !payload.excecao_pre_aprovada) {

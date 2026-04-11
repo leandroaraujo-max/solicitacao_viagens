@@ -68,7 +68,7 @@ function cadastrarUsuario(cpf, telefone, rg, dataNascimento, ehPCD, ehSono, outr
       senha_temporaria: true,
     });
   } else {
-    sheetUsuarios.appendRow([
+    _comLock(() => sheetUsuarios.appendRow([
       cpfLimpo,
       email,
       viajante.nome || '',
@@ -81,7 +81,7 @@ function cadastrarUsuario(cpf, telefone, rg, dataNascimento, ehPCD, ehSono, outr
       agora,
       '',   // ultimo_acesso
       true, // senha_temporaria — colaborador DEVE trocar no primeiro acesso
-    ]);
+    ]));
   }
 
   // Grava condições especiais declaradas na aba Viajantes (cache BQ)

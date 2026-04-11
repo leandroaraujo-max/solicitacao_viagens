@@ -239,7 +239,7 @@ function criarOuAtualizarViajante(dadosBQ) {
     catHosp, catVeic, motivoH, motivoV, agora
   ];
 
-  sheet.appendRow(nova);
+  _comLock(() => sheet.appendRow(nova));
   return {
     ...dadosBQ,
     categoria_hospedagem:      catHosp,

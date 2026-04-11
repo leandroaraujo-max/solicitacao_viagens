@@ -490,22 +490,24 @@ document.addEventListener('DOMContentLoaded', function() {
     if (btnId) btnId.style.display = 'none';
 
     // Chama carregarPerfilUsuario para obter dados completos (BQ + Usuarios)
-    setLoading('btnAvancarViagem', true, 'Avançar para dados da viagem →');
-    google.script.run
-      .withSuccessHandler(function(r) {
-        setLoading('btnAvancarViagem', false, 'Avançar para dados da viagem →');
+    setBtn('btnAvancarViagem', true, 'Avançar para dados da viagem →');
+    runServer(
+      { acao: 'carregarPerfilUsuario', cpf: SESSION_CPF },
+      function(r) {
+        setBtn('btnAvancarViagem', false, 'Avançar para dados da viagem →');
         if (r && r.sucesso) {
           onOperadorEncontrado(r.dados);
           renderizarDadosCadastrais(r.dados);
         }
-      })
-      .withFailureHandler(function() {
-        setLoading('btnAvancarViagem', false, 'Avançar para dados da viagem →');
+      },
+      function() {
+        setBtn('btnAvancarViagem', false, 'Avançar para dados da viagem →');
         // Em caso de falha, exibe campo CPF para re-identificação manual
         if (inputCPF) inputCPF.closest('.field-group').style.display = '';
         if (btnId) btnId.style.display = '';
-      })
-      .doPost_proxy({ acao: 'carregarPerfilUsuario', cpf: SESSION_CPF });
+      },
+      { msgLoader: 'Carregando seu perfil...' }
+    );
   }
 });
 
@@ -574,20 +576,22 @@ function buscarOperador() {
   const cpf = soCpf(document.getElementById('cpfOperador').value);
   if (cpf.length !== 11) return alertar('Informe um CPF válido (11 dígitos).');
   setBtn('btnIdentificar', true, 'Identificar');
-  setLoading('infoOperador', true);
-  google.script.run
-    .withSuccessHandler(r => {
+  document.getElementById('infoOperador').innerHTML = '';
+  runServer(
+    { acao: 'buscarViajante', cpf },
+    r => {
       setBtn('btnIdentificar', false, 'Identificar');
       try {
         if (!r || !r.sucesso) { setErro('infoOperador', (r && r.erro) || 'CPF não encontrado.'); return; }
         onOperadorEncontrado(r.dados);
       } catch(ex) { setErro('infoOperador', 'Erro interno: ' + ex.message); }
-    })
-    .withFailureHandler(e => {
+    },
+    e => {
       setBtn('btnIdentificar', false, 'Identificar');
       setErro('infoOperador', e.message || 'Falha na comunicação com o servidor.');
-    })
-    .doPost_proxy({ acao: 'buscarViajante', cpf });
+    },
+    { msgLoader: 'Consultando colaborador...' }
+  );
 }
 
 function onOperadorEncontrado(viajante) {
@@ -603,17 +607,19 @@ function buscarViajante() {
   const cpfOp = soCpf(document.getElementById('cpfOperador').value);
   if (cpfViajante.length !== 11) return alertar('Informe um CPF válido para o viajante.');
   setBtn('btnBuscarViajante', true, 'Buscar');
-  google.script.run
-    .withSuccessHandler(r => {
+  runServer(
+    { acao: 'validarDelegacao', cpfOperador: cpfOp, cpfViajante },
+    r => {
       setBtn('btnBuscarViajante', false, 'Buscar');
       if (!r.sucesso) { setErro('alertaDelegacao', r.erro); return; }
       onViajanteEncontrado(r.dados.viajante, r.dados.delegacao);
-    })
-    .withFailureHandler(e => {
+    },
+    e => {
       setBtn('btnBuscarViajante', false, 'Buscar');
       setErro('alertaDelegacao', e.message);
-    })
-    .doPost_proxy({ acao: 'validarDelegacao', cpfOperador: cpfOp, cpfViajante });
+    },
+    { msgLoader: 'Validando delegação...' }
+  );
 }
 
 function onViajanteEncontrado(viajante, delegacao) {
@@ -649,8 +655,9 @@ function buscarColegas() {
   if (cpfColega.length !== 11) return alertar('Informe o CPF completo do colega (11 dígitos).');
   if (cpfColega === cpfVia)    return alertar('O CPF do colega não pode ser igual ao seu.');
   setBtn('btnBuscarColega', true, 'Verificar');
-  google.script.run
-    .withSuccessHandler(r => {
+  runServer(
+    { acao: 'buscarViajante', cpf: cpfColega },
+    r => {
       setBtn('btnBuscarColega', false, 'Verificar');
       const el = document.getElementById('infoColegaStep1');
       if (!r || !r.sucesso) {
@@ -666,14 +673,15 @@ function buscarColegas() {
       el.className = 'info-box';
       el.classList.remove('hidden');
       checarPodeAvancar();
-    })
-    .withFailureHandler(e => {
+    },
+    e => {
       setBtn('btnBuscarColega', false, 'Verificar');
       setErro('infoColegaStep1', e.message || 'Erro de comunicação.');
       estado.parceiro = null;
       checarPodeAvancar();
-    })
-    .doPost_proxy({ acao: 'buscarViajante', cpf: cpfColega });
+    },
+    { msgLoader: 'Consultando colega...' }
+  );
 }
 
 function buscarColega() {
@@ -682,17 +690,18 @@ function buscarColega() {
   const cpfVia = soCpf(document.getElementById('cpfViajante')?.value || document.getElementById('cpfOperador').value);
   if (cpfColega.length !== 11) return;
   setBtn('btnVerificarColega', true, 'Verificar compatibilidade');
-  google.script.run
-    .withSuccessHandler(r => {
+  runServer(
+    { acao: 'buscarCompatibildade', cpfColega, cpfViajante: cpfVia },
+    r => {
       setBtn('btnVerificarColega', false, 'Verificar compatibilidade');
       if (!r.sucesso) { console.error('[buscarColega]', r.erro); return; }
       renderizarCompatibilidadeColega(r.dados);
-    })
-    .withFailureHandler(e => {
+    },
+    e => {
       setBtn('btnVerificarColega', false, 'Verificar compatibilidade');
       console.error(e);
-    })
-    .doPost_proxy({ acao: 'buscarCompatibildade', cpfColega, cpfViajante: cpfVia });
+    }
+  );
 }
 
 function renderizarCompatibilidadeColega(dados) {
@@ -743,8 +752,9 @@ function tentarCalcularDistancia() {
 }
 
 function calcularDistancia(origem, destino) {
-  google.script.run
-    .withSuccessHandler(r => {
+  runServer(
+    { acao: 'calcularDistancia', origem, destino },
+    r => {
       const badge = document.getElementById('badgeDistancia');
       const dados = r?.dados || {};
       if (!r?.sucesso || dados.distanciaKm == null) { badge.classList.add('hidden'); return; }
@@ -759,9 +769,9 @@ function calcularDistancia(origem, destino) {
         badge.textContent = `⚠ Distância: ~${km} km — Aéreo não recomendado (mín. 400 km)`;
         badge.className = 'badge badge-emergencial';
       }
-    })
-    .withFailureHandler(() => document.getElementById('badgeDistancia').classList.add('hidden'))
-    .doPost_proxy({ acao: 'calcularDistancia', origem, destino });
+    },
+    () => document.getElementById('badgeDistancia').classList.add('hidden')
+  );
 }
 
 // ── Serviços ─────────────────────────────────────────────────
@@ -951,19 +961,21 @@ function submeterSolicitacao() {
   };
 
   setBtn('btnSubmeter', true, 'Enviar solicitação ✓');
-  google.script.run
-    .withSuccessHandler(r => {
+  runServer(
+    payload,
+    r => {
       setBtn('btnSubmeter', false, 'Enviar solicitação ✓');
       if (!r.sucesso) { alertar(r.erro || 'Erro ao enviar.'); return; }
       document.getElementById('step-viagem').classList.add('hidden');
       document.getElementById('step-protocolo').classList.remove('hidden');
       document.getElementById('protocoloGerado').textContent = r.dados.reqID;
-    })
-    .withFailureHandler(e => {
+    },
+    e => {
       setBtn('btnSubmeter', false, 'Enviar solicitação ✓');
       alertar(e.message);
-    })
-    .doPost_proxy(payload);
+    },
+    { msgLoader: 'Enviando sua solicitação...' }
+  );
 }
 
 // ── Amadeus / Duffel ─────────────────────────────────────────
@@ -1046,26 +1058,27 @@ function buscarVoos() {
   const dataBusca = trecho === 'volta' ? dataVolta : dataIda;
   if (!origem || !destino) return alertar('Informe origem e destino para buscar voos.');
   if (!dataBusca) return alertar(trecho === 'volta' ? 'Informe a data de volta na solicitação antes de buscar o voo de volta.' : 'Informe a data de ida antes de buscar voos.');
+  // B6: preferência de cabine e bagagem extra para filtro/priorização na API
+  const cabine        = document.getElementById('selCabine')?.value || null;
+  const exigirBagagem = document.getElementById('chkBagagemExtra')?.checked || false;
   document.getElementById('resultadosVoos').classList.add('hidden');
   document.getElementById('loadingVoos').classList.remove('hidden');
   setBtn('btnBuscarVoos', true, '🔍 Buscar voos');
-  google.script.run
-    .withSuccessHandler(r => {
+  runServer(
+    { acao: 'buscarVoosAmadeus', origem, destino, dataIda: dataBusca, dataVolta: null, cabine, exigirBagagem },
+    r => {
       document.getElementById('loadingVoos').classList.add('hidden');
       setBtn('btnBuscarVoos', false, '🔍 Buscar voos');
       if (!r.sucesso || !r.dados?.sucesso) { alertar('Erro na busca: ' + (r.erro || r.dados?.erro || 'Erro desconhecido')); return; }
       renderizarVoos(r.dados.opcoes, trecho);
-    })
-    .withFailureHandler(e => {
+    },
+    e => {
       document.getElementById('loadingVoos').classList.add('hidden');
       setBtn('btnBuscarVoos', false, '🔍 Buscar voos');
       alertar('Falha: ' + e.message);
-    })
-    // B6: passar preferência de cabine e bagagem extra para filtro/priorização na API
-    const cabine        = document.getElementById('selCabine')?.value || null;
-    const exigirBagagem = document.getElementById('chkBagagemExtra')?.checked || false;
-    // Busca sempre one-way (1 slice) — preferência por trecho separada
-    .doPost_proxy({ acao: 'buscarVoosAmadeus', origem, destino, dataIda: dataBusca, dataVolta: null, cabine, exigirBagagem });
+    },
+    { msgLoader: 'Buscando passagens aéreas...' }
+  );
 }
 
 function renderizarVoos(opcoes, trecho) {
