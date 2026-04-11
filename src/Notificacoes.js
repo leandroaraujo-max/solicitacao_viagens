@@ -780,8 +780,9 @@ function _gerarAnexoPDF(reqID, viajante, solicitacao, classificacao) {
       Logger.log(`[PDF] Gerado com sucesso para ${reqID}`);
       return [blob];
     }
+    Logger.log(`[PDF] gerarPDFSolicitacao retornou null para ${reqID}`);
   } catch(err) {
-    Logger.log(`[PDF] Falha ao gerar PDF para ${reqID}: ${err.message}`);
+    Logger.log(`[PDF] Falha ao gerar PDF para ${reqID}: ${err.message} | ${err.stack}`);
   }
   return [];
 }
