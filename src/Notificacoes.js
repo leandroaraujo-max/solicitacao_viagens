@@ -298,6 +298,21 @@ function enviarEmailAprovacaoSetor(reqID, req) {
  */
 function dispararEmailAgencias(reqID, viajante, solicitacao, classificacao) {
   const cfg = getConfig();
+
+  // Enriquece com dados completos do viajante (telefone, rg, data_nascimento, cargo, centro_custo)
+  const cpfBusca = viajante.cpf || solicitacao.cpf_viajante || solicitacao.matricula_viajante || '';
+  if (cpfBusca) {
+    const enriquecido = _enriquecerViajante(cpfBusca);
+    viajante = Object.assign({}, viajante, {
+      telefone:        enriquecido.telefone        || viajante.telefone        || '',
+      rg:              enriquecido.rg               || viajante.rg              || '',
+      data_nascimento: enriquecido.data_nascimento  || viajante.data_nascimento || '',
+      cargo:           enriquecido.cargo            || viajante.cargo           || '',
+      centro_custo:    enriquecido.centro_custo     || viajante.centro_custo    || '',
+      cod_centro_custo:enriquecido.cod_centro_custo || viajante.cod_centro_custo|| '',
+    });
+  }
+
   const agencias = [
     { nome: 'Tastur',  email: props().getProperty('EMAIL_TASTUR') },
     { nome: 'Kontrip', email: props().getProperty('EMAIL_KONTRIP') },
