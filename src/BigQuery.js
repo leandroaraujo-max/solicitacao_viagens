@@ -113,20 +113,46 @@ function consultarColaboradorBQ(cpfOuMatricula) {
   `;
 
   try {
-    const request  = { query, useLegacySql: false, timeoutMs: 8000 };
-    const response = BigQuery.Jobs.query(request, cfg.BQ_PROJECT_ID);
+    // Jobs.insert é assíncrono — mais robusto que Jobs.query com timeoutMs
+    const job = BigQuery.Jobs.insert(
+      { configuration: { query: { query, useLegacySql: false } } },
+      cfg.BQ_PROJECT_ID
+    );
+    const jobId = job.jobReference.jobId;
+    Logger.log(`[BQ] Job inserido: ${jobId}`);
 
-    if (!response.rows || response.rows.length === 0) {
-      Logger.log(`[BQ] consultarColaboradorBQ: nenhum resultado para ${cpfOuMatricula}`);
+    // Polling com até 30s (10 tentativas × 3s)
+    let resultPage;
+    let tentativas = 0;
+    const maxTentativas = 10;
+    while (tentativas < maxTentativas) {
+      Utilities.sleep(3000);
+      tentativas++;
+      resultPage = BigQuery.Jobs.getQueryResults(cfg.BQ_PROJECT_ID, jobId, { timeoutMs: 3000 });
+      Logger.log(`[BQ] Tentativa ${tentativas}: jobComplete=${resultPage.jobComplete}`);
+      if (resultPage.jobComplete) break;
+    }
+
+    if (!resultPage || !resultPage.jobComplete) {
+      Logger.log(`[BQ] timeout após ${tentativas} tentativas para ${cpfOuMatricula}`);
+      throw new Error('Timeout ao aguardar resposta do BigQuery.');
+    }
+
+    if (!resultPage.rows || resultPage.rows.length === 0) {
+      Logger.log(`[BQ] nenhum resultado para ${cpfOuMatricula}`);
       return null;
     }
 
-    const schema = response.schema.fields.map(f => f.name);
-    const row    = response.rows[0].f.map(c => c.v);
+    const schema = resultPage.schema.fields.map(f => f.name);
+    const row    = resultPage.rows[0].f.map(c => c.v);
+    Logger.log(`[BQ] resultado: ${JSON.stringify(row.slice(0,4))}`);
     return linhaParaObjeto(schema, row);
+
   } catch (err) {
-    Logger.log(`[ERRO BQ] ${err.message}`);
-    throw new Error('Falha ao consultar o BigQuery. Tente novamente.');
+    // Loga detalhes completos para diagnóstico
+    Logger.log(`[ERRO BQ] message=${err.message}`);
+    try { Logger.log(`[ERRO BQ] details=${JSON.stringify(err)}`); } catch(_) {}
+    throw new Error(`Falha ao consultar o BigQuery: ${err.message}`);
   }
 }
 
