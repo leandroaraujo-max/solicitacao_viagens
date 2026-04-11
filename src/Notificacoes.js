@@ -67,6 +67,23 @@ function enviarEmailAprovacaoLideranca(reqID, viajante, solicitacao, classificac
   const obsRow = solicitacao.observacoes_viajante
     ? `<tr><td style="padding:8px;color:#666">Observações:</td><td style="padding:8px">${solicitacao.observacoes_viajante}</td></tr>` : '';
 
+  // Banner de exceção de quarto individual por condição de saúde
+  let excecaoBanner = '';
+  if (solicitacao.quarto_excecao_saude) {
+    const preAprov = solicitacao.excecao_pre_aprovada;
+    const cor = preAprov ? '#e8f5e9' : '#fff3e0';
+    const borda = preAprov ? '#2e7d32' : '#ff9800';
+    const titulo = preAprov
+      ? 'Quarto individual por condi&#231;&#227;o de sa&#250;de &#8212; PR&#201;-APROVADO'
+      : 'Quarto individual por condi&#231;&#227;o de sa&#250;de &#8212; LAUDO ANEXO';
+    const detalhe = preAprov
+      ? 'O viajante possui condi&#231;&#227;o de sa&#250;de j&#225; registrada e pr&#233;-aprovada no sistema (PCD ou dist&#250;rbio do sono).'
+      : `Novo laudo m&#233;dico enviado.${solicitacao.excecao_cid ? ' CID: <strong>' + solicitacao.excecao_cid + '</strong>' : ''}`;
+    excecaoBanner = `<div style="background:${cor};border-left:4px solid ${borda};padding:12px;margin-bottom:16px;border-radius:0 4px 4px 0">
+      <strong>${titulo}</strong><br><span style="font-size:13px">${detalhe}</span>
+    </div>`;
+  }
+
   const _fmtCpf = (c) => { const s = String(c||'').replace(/\D/g,'').padStart(11,'0'); return s.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/,'$1.$2.$3-$4'); };
   const _fmtNasc = (d) => { if (!d) return '&#8212;'; try { return Utilities.formatDate(new Date(d),'America/Sao_Paulo','dd/MM/yyyy'); } catch(e) { return String(d); } };
 
@@ -77,7 +94,7 @@ function enviarEmailAprovacaoLideranca(reqID, viajante, solicitacao, classificac
         <p style="color:#FFCE00;margin:4px 0 0">Protocolo: <strong>${reqID}</strong></p>
       </div>
       <div style="background:#fff;padding:24px;border:1px solid #e0e0e0;border-top:none">
-        ${emergBanner}${avisoFerias}
+        ${emergBanner}${avisoFerias}${excecaoBanner}
         <p>Prezado(a) <strong>${nomeDestinatario}</strong>,</p>
         <p>O(a) colaborador(a) <strong>${viajante.nome}</strong> solicitou uma viagem e sua aprova&#231;&#227;o &#233; necess&#225;ria.</p>
         <table style="width:100%;border-collapse:collapse;margin:16px 0">
@@ -145,6 +162,23 @@ function enviarEmailPreAprovacaoSetor(reqID, req) {
   const _fmtCpf = (c) => { const s = String(c||'').replace(/\D/g,'').padStart(11,'0'); return s.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/,'$1.$2.$3-$4'); };
   const _fmtNasc = (d) => { if (!d) return '&#8212;'; try { return Utilities.formatDate(new Date(d),'America/Sao_Paulo','dd/MM/yyyy'); } catch(e) { return String(d); } };
 
+  // Banner de exceção de quarto individual
+  let excecaoBanner = '';
+  if (req.quarto_excecao_saude) {
+    const preAprov = req.excecao_pre_aprovada;
+    const cor = preAprov ? '#e8f5e9' : '#fff3e0';
+    const borda = preAprov ? '#2e7d32' : '#ff9800';
+    const titulo = preAprov
+      ? 'Quarto individual por condi&#231;&#227;o de sa&#250;de &#8212; PR&#201;-APROVADO'
+      : 'Quarto individual por condi&#231;&#227;o de sa&#250;de &#8212; LAUDO ANEXO';
+    const detalhe = preAprov
+      ? 'Condi&#231;&#227;o j&#225; registrada e pr&#233;-aprovada (PCD ou dist&#250;rbio do sono).'
+      : `Novo laudo m&#233;dico enviado.${req.excecao_cid ? ' CID: <strong>' + req.excecao_cid + '</strong>' : ''}`;
+    excecaoBanner = `<div style="background:${cor};border-left:4px solid ${borda};padding:12px;margin-bottom:16px;border-radius:0 4px 4px 0">
+      <strong>${titulo}</strong><br><span style="font-size:13px">${detalhe}</span>
+    </div>`;
+  }
+
   const html = `
     <div style="font-family:sans-serif;max-width:620px;margin:auto">
       <div style="background:#FF8F00;padding:20px;border-radius:8px 8px 0 0">
@@ -152,6 +186,7 @@ function enviarEmailPreAprovacaoSetor(reqID, req) {
         <p style="color:#FFF9C4;margin:4px 0 0">Protocolo: <strong>${reqID}</strong></p>
       </div>
       <div style="background:#fff;padding:24px;border:1px solid #e0e0e0;border-top:none">
+        ${excecaoBanner}
         <p>A lideran&#231;a aprovou a necessidade da viagem abaixo. Verifique a solicita&#231;&#227;o e <strong>pr&#233;-aprove</strong> para que as ag&#234;ncias sejam acionadas.</p>
         <table style="width:100%;border-collapse:collapse;margin:16px 0">
           <tr><td style="padding:8px;color:#666">Viajante:</td><td style="padding:8px;font-weight:600">${req.nome_viajante}</td></tr>
@@ -204,6 +239,20 @@ function enviarEmailAprovacaoSetor(reqID, req) {
   const obsRow = req.observacoes_viajante
     ? `<tr><td style="padding:8px;color:#666">Observa&#231;&#245;es:</td><td style="padding:8px">${req.observacoes_viajante}</td></tr>` : '';
 
+  // Banner de exceção de quarto individual
+  let excecaoBanner = '';
+  if (req.quarto_excecao_saude) {
+    const preAprov = req.excecao_pre_aprovada;
+    const cor = preAprov ? '#e8f5e9' : '#fff3e0';
+    const borda = preAprov ? '#2e7d32' : '#ff9800';
+    const titulo = preAprov
+      ? 'Quarto individual por condi&#231;&#227;o de sa&#250;de &#8212; PR&#201;-APROVADO'
+      : 'Quarto individual por condi&#231;&#227;o de sa&#250;de &#8212; LAUDO ANEXO';
+    excecaoBanner = `<div style="background:${cor};border-left:4px solid ${borda};padding:12px;margin-bottom:16px;border-radius:0 4px 4px 0">
+      <strong>${titulo}</strong>
+    </div>`;
+  }
+
   const html = `
     <div style="font-family:sans-serif;max-width:660px;margin:auto">
       <div style="background:#0086FF;padding:20px;border-radius:8px 8px 0 0">
@@ -211,6 +260,7 @@ function enviarEmailAprovacaoSetor(reqID, req) {
         <p style="color:#FFCE00;margin:4px 0 0">Protocolo: <strong>${reqID}</strong></p>
       </div>
       <div style="background:#fff;padding:24px;border:1px solid #e0e0e0;border-top:none">
+        ${excecaoBanner}
         <p>Selecione a ag&#234;ncia aprovada:</p>
         <table style="width:100%;border-collapse:collapse;margin:12px 0 20px">
           <tr><td style="padding:8px;color:#666">Viajante:</td><td style="padding:8px;font-weight:600">${req.nome_viajante}</td></tr>
@@ -282,6 +332,15 @@ function dispararEmailAgencias(reqID, viajante, solicitacao, classificacao) {
     const bagRow = solicitacao.bagagem_extra
       ? `<tr><td style="padding:8px;color:#666">Bagagem extra:</td><td style="padding:8px">Sim &#8212; despachar bagagem</td></tr>` : '';
 
+    // Banner de exceção de quarto individual
+    let excecaoBanner = '';
+    if (solicitacao.quarto_excecao_saude) {
+      const preAprov = solicitacao.excecao_pre_aprovada;
+      excecaoBanner = `<div style="background:${preAprov ? '#e8f5e9' : '#fff3e0'};border-left:4px solid ${preAprov ? '#2e7d32' : '#ff9800'};padding:12px;margin-bottom:16px;border-radius:0 4px 4px 0">
+        <strong>Quarto individual por condi&#231;&#227;o de sa&#250;de${preAprov ? ' &#8212; PR&#201;-APROVADO' : ''}</strong>
+      </div>`;
+    }
+
     // Bloco de preferência do viajante — se preenchida
     const temVoo   = solicitacao.preferencia_voo_cia   && solicitacao.preferencia_voo_cia   !== '';
     const temHotel = solicitacao.preferencia_hotel_nome && solicitacao.preferencia_hotel_nome !== '';
@@ -326,6 +385,7 @@ function dispararEmailAgencias(reqID, viajante, solicitacao, classificacao) {
         </div>
         <div style="background:#fff;padding:24px;border:1px solid #e0e0e0;border-top:none">
           ${emissor}
+          ${excecaoBanner}
           <table style="width:100%;border-collapse:collapse">
             <tr><td style="padding:8px;color:#666">Viajante:</td>
                 <td style="padding:8px;font-weight:600">${viajante.nome}</td></tr>
