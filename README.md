@@ -2,9 +2,9 @@
 
 > **Projeto:** Automação do processo de viagens corporativas Magalu / Luizalabs  
 > **Stack:** Google Apps Script · BigQuery · Google Sheets · Google Drive · Duffel Flights API  
-> **Status:** 🟢 v2 em produção — Deploy @42  
+> **Status:** 🟢 v3 em produção — Deploy @70  
 > **Data de início:** 08/04/2026  
-> **Último deploy:** 09/04/2026 — @42  
+> **Último deploy:** 11/04/2026 — @70  
 
 ---
 
@@ -45,8 +45,17 @@
 | Pré-aprovação do Setor (E1) | ✅ Produção |
 | Verificação de férias do N1 (C2) | ✅ Produção |
 | Campos de origem, observações, bagagem, rodoviário, carro | ✅ Produção |
+| Login com autenticação CPF + senha (sandbox GAS) | ✅ Produção |
+| Geração de PDF da solicitação (`gerarPDFSolicitacao`) | ✅ Produção |
+| LockService (concorrência) + `logErro()` global | ✅ Produção |
+| Loader global `runServer()` no frontend | ✅ Produção |
+| Emails com HTML entities (sem emojis) + dados completos do viajante | ✅ Produção |
+| Cabine fixa economy (sem seletor) | ✅ Produção |
+| Busca IATA em campos de carro (retirada/devolução) | ✅ Produção |
+| Telefone no header + perfil do viajante | ✅ Produção |
+| Cadastro PCD/sono com normalização CPF padStart | ✅ Produção |
 
-**Deploy ativo:** `AKfycbzi3Cy5rJ2pB2QH1B7p-d7HUw9xNPwF1pUrUS6lDRmznQ-Ss1X2js_YNr3wK6vBSTTh` @42  
+**Deploy ativo:** `AKfycbzi3Cy5rJ2pB2QH1B7p-d7HUw9xNPwF1pUrUS6lDRmznQ-Ss1X2js_YNr3wK6vBSTTh` @70  
 **Script ID:** `157FO7diD5kMP3FWh6tkFvPveElKHhVzJKrdPMqTvaQw-sce_wTq4jwXX`
 
 ### Histórico de Deploys
@@ -58,6 +67,16 @@
 | @40 | `604fdea` | fix: distância Geocoder+Haversine, autocomplete `r.dados.locais`, voos `r.dados.opcoes` |
 | @41 | `d1a7438` | fix: filtro Azul/Gol/LATAM, sem preço nos voos, sem alerta RH, corrige upload laudo (matrícula) |
 | @42 | `1c46322` | feat: busca voo ida/volta separada, dedup resultados, badges por trecho, CSS `btn-trecho` |
+| @51 | — | fix: tipo_servico, assento_especial, cod_centro_custo, emoji emails, Duffel economy |
+| @52 | — | fix: CPF leading-zero normalization (`_normCpf()`) |
+| @53 | — | fix: BQ cache CPF zero-padding, radio "Em conjunto" |
+| @55 | — | feat: `gerarPDFSolicitacao()`, `_vincularConjunto()` |
+| @57 | — | feat: LockService `_comLock()`, `logErro()`, loader global `runServer()` |
+| @59 | — | refactor: BigQuery.js reescrito — Jobs.query com timeoutMs:20000 |
+| @65 | — | fix: login redirect sandbox — botão "Acessar o Portal" com user gesture |
+| @67 | — | fix: HTML malformado step-identificacao, SERVICOS_VALIDOS restaurado |
+| @69 | — | fix: `soCpf()` TypeError, `condicaoEspecialPreAprovada` centralizado |
+| @70 | `56308ae` | feat: emails HTML entities + dados viajante enriquecidos, cabine economy-only, IATA carro, telefone header, CPF padStart cadastro PCD |
 
 ---
 
@@ -163,14 +182,16 @@ Um **portal web** com uma URL de entrada única, composto por quatro interfaces 
 src/
 ├── appsscript.json       — Manifesto do projeto GAS
 ├── Codigo.js             — Roteador principal (doGet / doPost / doPost_proxy)
+├── Auth.js               — Autenticação CPF/senha, sessão, cadastro e condições especiais
 ├── BigQuery.js           — Integração BQ + cache-aside em Sheets
 ├── Solicitacoes.js       — Criação e gestão de solicitações de viagem
 ├── Aprovacoes.js         — Cadeia hierárquica N1/N2 + tokens + SLA checker
 ├── Casamento.js          — Motor de match entre viagens similares
 ├── Delegacoes.js         — Validação de solicitações em nome de terceiros
-├── Drive.js              — Upload de laudos e vouchers PDF no Google Drive
-├── Notificacoes.js       — Templates de e-mail e GmailApp
+├── Drive.js              — Upload de laudos e vouchers PDF no Google Drive + geração de PDF
+├── Notificacoes.js       — Templates de e-mail (HTML entities) e GmailApp
 ├── AmadeusAPI.js         — Integração Duffel Flights API (busca consultiva de voos)
+├── Login.html            — Tela de login/cadastro (CPF + senha)
 ├── Index.html            — Portal do Viajante (frontend principal)
 ├── PortalAgencia.html    — Portal do Prestador (cotação e vouchers)
 ├── PortalAprovacao.html  — Página de confirmação pós-aprovação
@@ -199,6 +220,21 @@ Ponto de entrada de todas as requisições HTTP do GAS Web App.
 | `renderPortalAgencia(reqID, agencia)` | Renderiza o `PortalAgencia.html` passando `reqID` e `agencia` como variáveis de template. |
 | `renderPaginaConfirmacao(acao)` | Renderiza o `PortalAprovacao.html` com a ação realizada (aprovação/reprovação). |
 | `inicializarPlanilha()` | Cria automaticamente todas as 6 abas necessárias (`Solicitacoes`, `Viajantes`, `Tokens`, `LogAprovacoes`, `MatchLog`, `Delegacoes`) com seus headers completos, caso ainda não existam. Chamada no início de cada `doPost_proxy`. |
+
+---
+
+### `Auth.js` — Autenticação e Sessão
+
+Gerencia login, cadastro, sessão e condições especiais dos viajantes.
+
+| Função | Descrição |
+|---|---|
+| `loginUsuario(cpf, senha)` | Valida CPF + senha na aba `Usuarios`, grava sessão no `CacheService` (cpf, email, nome, telefone, trocarSenha) e retorna dados da sessão. |
+| `fazerCadastro(payload)` | Registra novo viajante na aba `Usuarios` com senha temporária (hash SHA-256), grava condições especiais (PCD, sono) e faz upload de laudo se fornecido. |
+| `trocarSenha(cpf, senhaAtual, novaSenha)` | Valida a senha atual e atualiza o hash na aba `Usuarios`. |
+| `carregarPerfilUsuario(cpf)` | Busca perfil completo do viajante na aba `Viajantes` pelo CPF normalizado (padStart 11). |
+| `_normCpf(v)` | Normaliza CPF removendo não-dígitos e preenchendo com zeros à esquerda (padStart 11). |
+| `_atualizarCondicoesEspeciais(cpf, opts)` | Atualiza PCD, sono e outras condições na aba `Viajantes`. CPF normalizado com `padStart(11,'0')` para compatibilidade com BQ cache. Upload de laudos no Drive. |
 
 ---
 
@@ -327,7 +363,7 @@ o ciclo de questionamentos entre setor e solicitante.
 
 | Função | Descrição |
 |---|---|
-| `dispararEmailAgencias(reqID, viajante, solicitacao, classificacao)` | Envia e-mail HTML para Tastur e Kontrip com dados da viagem, prazo de cotação (4h se emergencial, 24h se comum) e link exclusivo para o portal. |
+| `dispararEmailAgencias(reqID, viajante, solicitacao, classificacao)` | Envia e-mail HTML para Tastur e Kontrip com dados completos do viajante (CPF, nascimento, RG, celular, cargo, centro de custo), preferências de voo/hotel e link exclusivo para o portal. Prazo 4h se emergencial, 24h se comum. |
 | `enviarEmailAprovacaoN1(reqID, req, cadeia)` | Envia e-mail ao aprovador N1 com tabela comparativa das cotações e três botões de ação (Aprovar Tastur / Aprovar Kontrip / Reprovar), cada um com token único de 48h. |
 | `enviarEmailAprovacaoN2(reqID, req, emailN1, agenciaEscolhidaN1)` | Envia e-mail ao aprovador N2 informando a decisão do N1 e solicitando confirmação. Se não houver N2, notifica o setor para aprovação manual. |
 | `notificarRHExcecaoSaude(reqID, viajante, solicitacao)` | **MVP: desabilitada (D15).** Stub que apenas registra no log. Prevista para V2. |
@@ -343,6 +379,9 @@ o ciclo de questionamentos entre setor e solicitante.
 | `montarTabelaComparativa(req)` | Gera HTML de tabela com cotações Tastur vs Kontrip para o e-mail de aprovação N1. |
 | `formatBRL(valor)` | Formata um número como moeda BRL (ex.: `R$ 1.234,56`). |
 | `props()` | Atalho para `PropertiesService.getScriptProperties()`. |
+| `rodapeEmail(cfg)` | Gera rodapé HTML padrão para todos os e-mails com link para o setor de viagens. Usa HTML entities em vez de emojis. |
+| `_fmtCpf(cpf)` | Formata CPF com pontuação (000.000.000-00). Normaliza com padStart(11,'0'). |
+| `_fmtNasc(data)` | Formata data de nascimento no padrão dd/MM/yyyy ou retorna em-dash se ausente. |
 
 ---
 
@@ -350,7 +389,7 @@ o ciclo de questionamentos entre setor e solicitante.
 
 | Arquivo | Descrição |
 |---|---|
-| `Index.html` | **Portal do Viajante.** Interface principal. Identificação via CPF, suporte a delegação, campos de origem/destino (cidade + estado), datas, tipo de serviço (aéreo, rodoviário, hospedagem, carro), motivo, observações, bagagem extra, locação de veículo, viajantes adicionais (casamento). Seção de preferências com **busca de voos por trecho (Ida / Volta)** — autocomplete de cidades/aeroportos via Duffel Places, exibe apenas Azul/Gol/LATAM sem mostrar preços, com deduplicação de resultados e badges separados por trecho selecionado. Cálculo automático de distância (Geocoder + Haversine) com badge elegibilidade aéreo (≥400 km). |
+| `Index.html` | **Portal do Viajante.** Interface principal. Identificação via CPF, suporte a delegação, campos de origem/destino (cidade + estado), datas, tipo de serviço (aéreo, rodoviário, hospedagem, carro), motivo, observações, bagagem extra, locação de veículo. Seção de preferências com **busca de voos por trecho (Ida / Volta)** — autocomplete de cidades/aeroportos via Duffel Places, exibe apenas Azul/Gol/LATAM sem mostrar preços, com deduplicação de resultados e badges separados por trecho selecionado. Cabine fixa em economy (sem seletor). Busca IATA nos campos de retirada/devolução de carro. Telefone do viajante no header. Cálculo automático de distância (Geocoder + Haversine) com badge elegibilidade aéreo (≥400 km). |
 | `PortalAgencia.html` | **Portal do Prestador.** Interface exclusiva por link tokenizado para que a agência preencha a cotação (dados de aéreo, hospedagem e carro) e faça upload dos vouchers em PDF, em momentos distintos do fluxo. |
 | `PortalAprovacao.html` | **Página de Confirmação.** Renderizada após o clique em um link de aprovação/reprovação, confirmando ao aprovador que a ação foi registrada. |
 | `Estilos.html` | **CSS Compartilhado.** Folha de estilos incluída via `<?!= include('Estilos'); ?>` em todos os portais. Define o design system com as cores Magalu (azul `#0086FF`, amarelo `#FFCE00`). |
@@ -390,11 +429,11 @@ solicitacao_viagens/
 
 Itens pendentes identificados para versões futuras:
 
-- [ ] Notificação ao Setor quando `PASTA_LAUDOS_ID` não estiver configurado (alerta de configuração)
 - [ ] Dashboard Looker Studio com custos e SLAs
 - [ ] Integração com sistema de créditos / reembolso
 - [ ] Testes automatizados das funções críticas (GAS + Jasmine ou similar)
 - [ ] Passagem para ambiente Duffel produção (`duffel_live_...`) após homologação
+- [ ] Notificação ao RH para exceção de quarto individual (D15 — desabilitado no MVP)
 
 ---
 
@@ -413,3 +452,7 @@ Itens pendentes identificados para versões futuras:
 | `BQ_TABLE_FUNCIONARIOS` | `maga-bigdata.mlpap.mag_v_funcionarios_ativos` |
 | `WEBAPP_URL` | URL pública do Web App GAS |
 | `DUFFEL_TOKEN` | Token da Duffel API (painel: More → Developers → Access Tokens) |
+| `DISTANCIA_KM_LIMITE` | Distância mínima km para carro automático (default: 250) |
+| `SLA_COTACAO_H` | SLA em horas para cotação das agências (default: 24) |
+| `SLA_N1_COMUM_H` | SLA em horas para aprovação N1 comum (default: 24) |
+| `SLA_N1_EMERG_H` | SLA em horas para aprovação N1 emergencial (default: 4) |
