@@ -41,10 +41,18 @@
           Para mim mesmo
         </label>
         <label class="radio-opt">
-            <input type="radio" name="tipo_solicitacao" value="conjunto" onchange="onTipoSolicitacao(this)">
-            Em conjunto com outro colaborador
-          </label>
-          <label class="radio-opt">
+          <input type="radio" name="tipo_solicitacao" value="conjunto" onchange="onTipoSolicitacao(this)">
+          Em conjunto com outro colaborador
+        </label>
+        <label class="radio-opt">
+          <input type="radio" name="tipo_solicitacao" value="delegado" onchange="onTipoSolicitacao(this)">
+          Para outro colaborador (delegação)
+        </label>
+      </div>
+    </div>
+
+    <div class="field-group" id="secaoCpfOperador">
+      <label for="cpfOperador">Seu CPF <span class="req">*</span></label>
       <div class="input-row">
         <input type="text" id="cpfOperador" placeholder="000.000.000-00" maxlength="14" oninput="mascaraCPF(this)" />
         <button class="btn-secondary" id="btnIdentificar" onclick="buscarOperador()">Identificar</button>
@@ -529,13 +537,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const inputCPF = document.getElementById('cpfOperador');
     if (inputCPF) {
       inputCPF.value = formatarCPF(SESSION_CPF);
-      // Oculta apenas a linha do input CPF (não o field-group inteiro que contém radio buttons)
-      const inputRow = inputCPF.closest('.input-row');
-      if (inputRow) inputRow.style.display = 'none';
     }
-    // Esconde o botão "Identificar" também
-    const btnId = document.getElementById('btnIdentificar');
-    if (btnId) btnId.style.display = 'none';
+    // Oculta a seção inteira do CPF (agora é um field-group próprio)
+    const secaoCpf = document.getElementById('secaoCpfOperador');
+    if (secaoCpf) secaoCpf.style.display = 'none';
 
     // Chama carregarPerfilUsuario para obter dados completos (BQ + Usuarios)
     setBtn('btnAvancarViagem', true, 'Avançar para dados da viagem →');
@@ -551,8 +556,7 @@ document.addEventListener('DOMContentLoaded', function() {
       function() {
         setBtn('btnAvancarViagem', false, 'Avançar para dados da viagem →');
         // Em caso de falha, exibe campo CPF para re-identificação manual
-        if (inputCPF) inputCPF.closest('.field-group').style.display = '';
-        if (btnId) btnId.style.display = '';
+        if (secaoCpf) secaoCpf.style.display = '';
       },
       { msgLoader: 'Carregando seu perfil...' }
     );
