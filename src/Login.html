@@ -267,17 +267,17 @@
   let _laudoPCDNome   = null;
 
   function _redirecionarParaPortal(token) {
-    var form = document.createElement('form');
-    form.method = 'GET';
-    form.action = WEBAPP_URL;
-    var inp = document.createElement('input');
-    inp.type  = 'hidden';
-    inp.name  = 'sessionToken';
-    inp.value = token;
-    form.appendChild(inp);
-    form.target = '_top';
-    document.body.appendChild(form);
-    form.submit();
+    // Mostra botao para o usuario clicar (gesto necessario p/ navegacao top-frame no sandbox GAS)
+    var panel = document.querySelector('.panel.active');
+    if (panel) panel.innerHTML =
+      '<div class="success-box">' +
+      '<div class="icon">&#9989;</div>' +
+      '<h3 style="color:#2e7d32">Login realizado com sucesso!</h3>' +
+      '<p style="margin:12px 0;color:#555">Clique abaixo para acessar o portal.</p>' +
+      '<form method="GET" action="' + WEBAPP_URL + '" target="_top">' +
+      '<input type="hidden" name="sessionToken" value="' + token + '">' +
+      '<button type="submit" class="btn-primary" style="margin-top:12px;font-size:16px;padding:14px 32px">Acessar o Portal &#8594;</button>' +
+      '</form></div>';
   }
 
   function showTab(name) {
