@@ -307,8 +307,17 @@ function _getSheetUsuarios() {
   let aba   = ss.getSheetByName('Usuarios');
   if (!aba) {
     aba = ss.insertSheet('Usuarios');
-    aba.appendRow(['cpf','email','nome','senha_hash','senha_salt','telefone','rg','data_nascimento','status','criado_em','ultimo_acesso']);
+    aba.appendRow(['cpf','email','nome','senha_hash','senha_salt','telefone','rg','data_nascimento','status','criado_em','ultimo_acesso','senha_temporaria']);
     aba.setFrozenRows(1);
+  } else {
+    // Migração: garante que a coluna senha_temporaria existe no cabeçalho (col 12)
+    // Sheets criadas antes desta versão tinham apenas 11 colunas no cabeçalho.
+    const nCols = Math.max(aba.getLastColumn(), 12);
+    const hdr   = aba.getRange(1, 1, 1, nCols).getValues()[0];
+    if (hdr.indexOf('senha_temporaria') === -1) {
+      // Escreve o nome da coluna em A1:L1 — posição 12 onde os dados já estão gravados
+      aba.getRange(1, 12).setValue('senha_temporaria');
+    }
   }
   return aba;
 }
