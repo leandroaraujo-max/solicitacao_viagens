@@ -141,7 +141,8 @@ const CIA_NOMES = {
   'JJ': 'LATAM',
 };
 
-function buscarVoosAmadeus(origem, destino, dataIda, dataVolta, adultos) {
+// B6: aceita 'cabine' (economy/business/first/null=todas) e 'exigirBagagem' (filtro opcional)
+function buscarVoosAmadeus(origem, destino, dataIda, dataVolta, adultos, cabine, exigirBagagem) {
   adultos = adultos || 1;
   try {
     // Garante códigos IATA válidos (resolve nomes de cidade automaticamente)
@@ -153,9 +154,10 @@ function buscarVoosAmadeus(origem, destino, dataIda, dataVolta, adultos) {
     var passengers = [];
     for (var i = 0; i < adultos; i++) passengers.push({ type: 'adult' });
 
-    const json = _duffelPost('/air/offer_requests?return_offers=true', {
-      data: { slices: slices, passengers: passengers, cabin_class: 'economy' },
-    });
+    var postBody = { data: { slices: slices, passengers: passengers } };
+    // B6: incluir cabin_class somente quando especificada (null = todas as cabines)
+    if (cabine) postBody.data.cabin_class = cabine.toLowerCase();
+    const json = _duffelPost('/air/offer_requests?return_offers=true', postBody);
 
     // Filtra apenas Azul (AD), Gol (G3) e LATAM (LA / JJ)
     const CIAS_PERMITIDAS = ['AD', 'G3', 'LA', 'JJ'];
@@ -166,7 +168,18 @@ function buscarVoosAmadeus(origem, destino, dataIda, dataVolta, adultos) {
         return CIAS_PERMITIDAS.indexOf(cia.toUpperCase()) !== -1;
       } catch(e) { return false; }
     });
-    const opcoes = offers.slice(0, 10).map(function(offer) {
+    // B6: filtrar por bagagem despachada quando solicitado
+    var filtrados = exigirBagagem
+      ? offers.filter(function(o) {
+          try {
+            var bags = o.slices[0].segments[0].passengers[0].baggages || [];
+            return bags.some(function(b) { return b.type === 'checked' && b.quantity > 0; });
+          } catch(e) { return false; }
+        })
+      : offers;
+    // Se filtro retornou vazio, usar todos (preferência, não obrigão)
+    if (exigirBagagem && filtrados.length === 0) filtrados = offers;
+    const opcoes = filtrados.slice(0, 10).map(function(offer) {
       try {
         const slice0  = offer.slices[0];
         const seg0    = slice0.segments[0];
@@ -204,7 +217,8 @@ function buscarVoosAmadeus(origem, destino, dataIda, dataVolta, adultos) {
           chegada:     segLast.arriving_at,
           duracao:     slice0.duration || '',
           paradas:     paradas,
-          classe:      'ECONOMY',
+          // B6: expor a cabine real da oferta (não hardcoded)
+          classe:      (offer.slices[0].fare_brand_name || (cabine || 'Economy')).toUpperCase(),
           bagagem:     bagagem,
           valor:       parseFloat(offer.total_amount),
           moeda:       offer.total_currency,

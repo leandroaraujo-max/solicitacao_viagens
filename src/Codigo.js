@@ -132,7 +132,7 @@ function doPost_proxy(payload) {
     calcularDistancia:           () => calcularDistanciaKm(payload.origem, payload.destino),
     // Duffel (busca consultiva de preferências)
     buscarLocaisAmadeus:   () => buscarLocaisAmadeus(payload.termo),
-    buscarVoosAmadeus:     () => buscarVoosAmadeus(payload.origem, payload.destino, payload.dataIda, payload.dataVolta || null, payload.adultos),
+    buscarVoosAmadeus:     () => buscarVoosAmadeus(payload.origem, payload.destino, payload.dataIda, payload.dataVolta || null, payload.adultos, payload.cabine || null, payload.exigirBagagem || false),
     buscarHoteisAmadeus:   () => buscarHoteisAmadeus(payload.cityCode, payload.checkin, payload.checkout, payload.adultos),
     // Auth
     cadastrarUsuario:      () => cadastrarUsuario(payload.cpf, payload.telefone, payload.rg, payload.dataNascimento, payload.ehPCD, payload.ehSono, payload.outraCondicao, payload.laudoPCDBase64, payload.laudoPCDNome),
@@ -270,8 +270,6 @@ function inicializarPlanilha() {
       'bagagem_extra',
       // A4 — período/tipo aéreo
       'aereo_periodo_preferido', 'aereo_tipo_trecho',
-      // L2-A / L3-E: assento especial solicitado pelo viajante
-      'assento_especial', 'motivo_assento_especial',
       // A5 — rodoviário
       'rodov_data_ida', 'rodov_data_volta', 'rodov_periodo_preferido', 'rodov_tipo_trecho', 'rodov_tipo_onibus',
       // A6 — carro completo
@@ -307,6 +305,9 @@ function inicializarPlanilha() {
       // Vouchers (5)
       'voucher_aereo_link', 'voucher_hotel_link', 'voucher_carro_link',
       'voucher_upload_em', 'concluido_em',
+      // B2+B3: campos extras ao final para não deslocar colunas existentes
+      'assento_especial', 'motivo_assento_especial',
+      'cod_centro_custo',
     ],
     'Viajantes': [
       'matricula', 'cpf', 'nome', 'cargo', 'cod_categoria', 'filial', 'centro_custo',

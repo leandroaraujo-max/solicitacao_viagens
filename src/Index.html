@@ -159,8 +159,19 @@
       </div>
       <div class="field-group">
         <label class="check-opt destaque">
-          <input type="checkbox" id="chkBagagemExtra"> 🧳 Necessidade de despachar bagagem extra
+          <input type="checkbox" id="chkBagagemExtra"> Necessidade de despachar bagagem extra
         </label>
+      </div>
+      <!-- B6: preferência de cabine para busca Duffel -->
+      <div class="field-group">
+        <label class="form-label">Classe de cabine preferida</label>
+        <select id="selCabine" class="form-control">
+          <option value="">Qualquer cabine</option>
+          <option value="economy" selected>Economy</option>
+          <option value="premium_economy">Premium Economy</option>
+          <option value="business">Business</option>
+          <option value="first">First</option>
+        </select>
       </div>
     </div>
 
@@ -324,9 +335,9 @@
           ⚠ A solicitação de assento especial (comfort, bulkhead, saída de emergência) deve ser <strong>comprovadamente por necessidades especiais</strong>. Será avaliada pelo setor de viagens.
         </div>
         <div class="check-group">
-          <label class="check-opt"><input type="checkbox" id="chkAssentoComfort"> Assento Comfort (mais espaço de pernas)</label>
-          <label class="check-opt"><input type="checkbox" id="chkAssentoBulkhead"> Bulkhead / Saída de emergência</label>
-          <label class="check-opt"><input type="checkbox" id="chkAssentoAcessivel"> Assento acessível (PCD / mobilidade reduzida)</label>
+          <label class="check-opt"><input type="checkbox" id="chkAssentoComfort" value="Comfort"> Assento Comfort (mais espaço de pernas)</label>
+          <label class="check-opt"><input type="checkbox" id="chkAssentoBulkhead" value="Bulkhead"> Bulkhead / Saída de emergência</label>
+          <label class="check-opt"><input type="checkbox" id="chkAssentoAcessivel" value="Acessivel"> Assento acessível (PCD / mobilidade reduzida)</label>
         </div>
         <div class="field-group" style="margin-top:8px">
           <input type="text" id="motivoAssentoEspecial" placeholder="Justificativa (obrigatória se selecionado acima)" />
@@ -395,6 +406,9 @@ const SESSION_CPF   = '<?= sessionCpf ?>';
 const SESSION_NOME  = '<?= sessionNome ?>';
 const SESSION_EMAIL = '<?= sessionEmail ?>';
 const SESSION_TOKEN = '<?= sessionToken ?>';
+
+// B1: lista de valores que representam modalidades de serviço (evita capturar outros checkboxes)
+const SERVICOS_VALIDOS = ['Aereo', 'Rodoviario', 'Hospedagem', 'Carro'];
 
 // ── Estado da aplicação ──────────────────────────────────────
 const estado = {
@@ -703,7 +717,9 @@ function calcularDistancia(origem, destino) {
 
 // ── Serviços ─────────────────────────────────────────────────
 function onServicoChange() {
-  const servicos = [...document.querySelectorAll('.check-group input[type=checkbox]:checked')].map(c => c.value);
+  // B1: filtrar pela lista de valores válidos (evita capturar checkboxes de período/assento)
+  const servicos = [...document.querySelectorAll('input[type=checkbox]:checked')]
+    .map(c => c.value).filter(v => SERVICOS_VALIDOS.includes(v));
   const temAereo     = servicos.includes('Aereo');
   const temRodov     = servicos.includes('Rodoviario');
   const temHosp      = servicos.includes('Hospedagem');
@@ -799,7 +815,9 @@ function renderizarPerfilViajante() {
 
 // ── Submissão ─────────────────────────────────────────────────
 function submeterSolicitacao() {
-  const servicos = [...document.querySelectorAll('.check-group input[type=checkbox]:checked')].map(c => c.value);
+  // B1: usar SERVICOS_VALIDOS para não capturar checkboxes de período/assento
+  const servicos = [...document.querySelectorAll('input[type=checkbox]:checked')]
+    .map(c => c.value).filter(v => SERVICOS_VALIDOS.includes(v));
   if (!servicos.length) return alertar('Selecione ao menos um serviço.');
 
   // Validação distância vs aéreo
@@ -839,6 +857,8 @@ function submeterSolicitacao() {
     // A4 — período/tipo aéreo
     aereo_periodo_preferido: getPeriodo('periodoAereo'),
     aereo_tipo_trecho:       getRadio('tipoPassagemAereo'),
+    // B6: preferência de cabine (enviada junto com a solicitação)
+    cabine:                  document.getElementById('selCabine')?.value || '',
     // A5 — rodoviário
     rodov_data_ida:          document.getElementById('rodovIda')?.value || '',
     rodov_data_volta:        document.getElementById('rodovVolta')?.value || '',
@@ -988,8 +1008,11 @@ function buscarVoos() {
       setBtn('btnBuscarVoos', false, '🔍 Buscar voos');
       alertar('Falha: ' + e.message);
     })
+    // B6: passar preferência de cabine e bagagem extra para filtro/priorização na API
+    const cabine        = document.getElementById('selCabine')?.value || null;
+    const exigirBagagem = document.getElementById('chkBagagemExtra')?.checked || false;
     // Busca sempre one-way (1 slice) — preferência por trecho separada
-    .doPost_proxy({ acao: 'buscarVoosAmadeus', origem, destino, dataIda: dataBusca, dataVolta: null });
+    .doPost_proxy({ acao: 'buscarVoosAmadeus', origem, destino, dataIda: dataBusca, dataVolta: null, cabine, exigirBagagem });
 }
 
 function renderizarVoos(opcoes, trecho) {

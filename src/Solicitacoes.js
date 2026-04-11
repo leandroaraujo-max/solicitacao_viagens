@@ -73,9 +73,6 @@ function submeterSolicitacao(payload) {
     // A4
     payload.aereo_periodo_preferido || '',
     payload.aereo_tipo_trecho       || '',
-    // L2-A/L3-E: assento especial e motivo
-    payload.assento_especial        || '',
-    payload.motivo_assento_especial || '',
     // A5 — rodoviário
     payload.rodov_data_ida          || '',
     payload.rodov_data_volta        || '',
@@ -126,7 +123,11 @@ function submeterSolicitacao(payload) {
     // Cotações Tastur + Kontrip — 39 colunas cada = 78 vazias
     ...Array(78).fill(''),
     // Voucher (5)
-    '', '', '', '', ''
+    '', '', '', '', '',
+    // B2+B3: campos extras ao final para não deslocar colunas existentes
+    payload.assento_especial        || '',
+    payload.motivo_assento_especial || '',
+    viajante.cod_centro_custo       || '',
   ];
 
   const sheet = SpreadsheetApp.openById(cfg.SHEET_ID).getSheetByName('Solicitacoes');
