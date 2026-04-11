@@ -27,6 +27,22 @@ function rodapeEmail(cfg) {
 function enviarEmailAprovacaoLideranca(reqID, viajante, solicitacao, classificacao, cadeia) {
   const cfg = getConfig();
 
+  // Enriquece viajante com dados completos (telefone, rg, data_nascimento, etc.)
+  const cpfBusca = viajante.cpf || solicitacao.cpf_viajante || solicitacao.matricula_viajante || '';
+  if (cpfBusca) {
+    try {
+      const enriquecido = _enriquecerViajante(cpfBusca);
+      viajante = Object.assign({}, viajante, {
+        telefone:        enriquecido.telefone        || viajante.telefone        || '',
+        rg:              enriquecido.rg               || viajante.rg              || '',
+        data_nascimento: enriquecido.data_nascimento  || viajante.data_nascimento || '',
+        cargo:           enriquecido.cargo            || viajante.cargo           || '',
+        centro_custo:    enriquecido.centro_custo     || viajante.centro_custo    || '',
+        cod_centro_custo:enriquecido.cod_centro_custo || viajante.cod_centro_custo|| '',
+      });
+    } catch(e) { Logger.log('[LIDERANÇA] Falha ao enriquecer viajante: ' + e.message); }
+  }
+
   // C2 — verifica férias do N1
   let destinatario = (cadeia.n1_email || '').toLowerCase();
   let nomeDestinatario = cadeia.n1_nome || 'Aprovador';
@@ -50,8 +66,7 @@ function enviarEmailAprovacaoLideranca(reqID, viajante, solicitacao, classificac
 
   if (!destinatario) {
     Logger.log(`[AVISO] Sem e-mail de aprovador para req ${reqID}`);
-    const vi = { nome: viajante.nome, categoria_hospedagem: viajante.categoria_hospedagem, motivo_categoria_hosp: '' };
-    dispararEmailAgencias(reqID, vi, solicitacao, classificacao);
+    dispararEmailAgencias(reqID, viajante, solicitacao, classificacao);
     atualizarStatusSolicitacao(reqID, 'Aguardando Cotação');
     return;
   }

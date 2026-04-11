@@ -100,7 +100,12 @@ function executarDecisaoAprovacao(reqID, emailAprovador, decisao, token) {
   if (decisao === 'PreAprovaViagem') {
     // E1: Setor pré-aprovou → dispara às agências
     atualizarStatusSolicitacao(reqID, 'Aguardando Cotação');
-    const vi = { nome: req.nome_viajante, categoria_hospedagem: req.quarto_tipo_solicitado, motivo_categoria_hosp: '' };
+    const vi = {
+      nome: req.nome_viajante,
+      cpf: req.cpf_viajante || req.matricula_viajante || '',
+      categoria_hospedagem: req.quarto_tipo_solicitado,
+      motivo_categoria_hosp: ''
+    };
     dispararEmailAgencias(reqID, vi, req, req.classificacao_aereo);
     Logger.log(`[SETOR PRÉ-APROVOU] ${reqID} — agências notificadas`);
     return;
