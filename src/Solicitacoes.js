@@ -155,11 +155,20 @@ function submeterSolicitacao(payload) {
   // 9. Dispara e-mail de aprovação para a liderança direta
   enviarEmailAprovacaoLideranca(reqID, viajante, payload, classificacao, cadeia);
 
-  // 10. L1-B: Verifica casamento com outras solicitações compatíveis (após gravação)
+  // 10. L1-B: Verifica casamento automático com outras solicitações compatíveis
   try {
     verificarCasamento(reqID);
   } catch (errMatch) {
     Logger.log('[submeterSolicitacao] verificarCasamento falhou (não crítico): ' + errMatch.message);
+  }
+
+  // 11. D1: Vínculo imediato quando tipo = conjunto (parceiro declarado no passo 1)
+  if (payload.via_conjunto && payload.parceiro_cpf) {
+    try {
+      _vincularConjunto(reqID, payload.parceiro_cpf, payload.nome_operador || viajante.nome);
+    } catch (errConj) {
+      Logger.log('[submeterSolicitacao] vínculo conjunto falhou (não crítico): ' + errConj.message);
+    }
   }
 
   return { reqID, status: 'Pendente Aprovação Liderança', classificacao, antecedenciaDias };
@@ -205,7 +214,49 @@ function gerarReqID() {
 }
 
 /**
- * Grava cotação enviada pela agência na aba Solicitacoes.
+ * D1: Busca a solicitação mais recente do parceiro (pelo CPF) e vincula imediatamente.
+ * Se o parceiro ainda não submeteu, grava a intenção nos campos de casamento
+ * para que o motor de casamento realize o vínculo quando ele submeter.
+ */
+function _vincularConjunto(reqID, parceiroCpf, operadorNome) {
+  const cfg    = getConfig();
+  const normCP = String(parceiroCpf).replace(/\D/g,'').padStart(11,'0');
+
+  const sheet  = SpreadsheetApp.openById(cfg.SHEET_ID).getSheetByName('Solicitacoes');
+  const dados  = sheet.getDataRange().getValues();
+  const hdr    = dados[0];
+  const iReq   = hdr.indexOf('req_id');
+  const iCPF   = hdr.indexOf('cpf_viajante');
+  const iStat  = hdr.indexOf('status');
+
+  // Busca solicitação ativa do parceiro (mais recente)
+  let parcReqID = null;
+  for (let i = dados.length - 1; i >= 1; i--) {
+    const cpfLinha  = String(dados[i][iCPF] || '').replace(/\D/g,'').padStart(11,'0');
+    const statusLinha = String(dados[i][iStat] || '');
+    if (cpfLinha === normCP && statusLinha !== 'Cancelada' && statusLinha !== 'Reprovada') {
+      parcReqID = dados[i][iReq];
+      break;
+    }
+  }
+
+  if (parcReqID) {
+    // Parceiro já tem solicitação — vincular diretamente
+    Logger.log(`[CONJUNTO] Vinculando ${reqID} <-> ${parcReqID}`);
+    vincularSolicitacoes(reqID, parcReqID, operadorNome);
+  } else {
+    // Parceiro ainda não submeteu — grava intenção no campo match_req_ids
+    // O motor de casamento vai completar quando ele submeter
+    Logger.log(`[CONJUNTO] Parceiro CPF ${normCP} sem solicitação ativa. Intenção registrada em ${reqID}.`);
+    atualizarCampoSolicitacao(reqID, 'match_req_ids',      'AGUARDANDO_PARCEIRO');
+    atualizarCampoSolicitacao(reqID, 'match_viajantes',    normCP);
+    atualizarCampoSolicitacao(reqID, 'match_operador',     operadorNome);
+    atualizarCampoSolicitacao(reqID, 'match_tipo_servico', 'CONJUNTO');
+    atualizarCampoSolicitacao(reqID, 'match_em',           new Date());
+  }
+}
+
+/**
  */
 function submeterCotacaoAgencia(payload) {
   if (!payload.reqID)   throw new Error('ID da solicitação não informado.');

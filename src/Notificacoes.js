@@ -16,7 +16,7 @@ const POLITICA_LINK = 'https://drive.google.com/file/d/1SFxzQXkTSr36KR4xJLNwp6vN
 function rodapeEmail(cfg) {
   return `<p style="color:#999;font-size:11px;margin-top:20px;border-top:1px solid #eee;padding-top:12px">
     Sistema de Viagens Corporativas Magalu | Dúvidas: ${cfg.EMAIL_VIAGENS || ''}
-    | <a href="${POLITICA_LINK}" style="color:#0086FF">Política de Viagens</a>
+    | <a href="${POLITICA_LINK}" style="color:#0086FF">📄 Política de Viagens</a>
   </p>`;
 }
 
@@ -99,7 +99,12 @@ function enviarEmailAprovacaoLideranca(reqID, viajante, solicitacao, classificac
 
   GmailApp.sendEmail(destinatario,
     `[APROVAÇÃO NECESSÁRIA] Viagem de ${viajante.nome} para ${solicitacao.destino_cidade} | ${reqID}`,
-    '', { htmlBody: html, name: 'Sistema de Viagens Magalu', replyTo: cfg.EMAIL_VIAGENS });
+    '', {
+      htmlBody: html,
+      name: 'Sistema de Viagens Magalu',
+      replyTo: cfg.EMAIL_VIAGENS,
+      attachments: _gerarAnexoPDF(reqID, viajante, solicitacao, classificacao),
+    });
   Logger.log(`[LIDERANÇA EMAIL] Enviado para: ${destinatario} | req: ${reqID}`);
 }
 
@@ -129,7 +134,7 @@ function enviarEmailPreAprovacaoSetor(reqID, req) {
         <p>A liderança aprovou a necessidade da viagem abaixo. Verifique a solicitação e <strong>pré-aprove</strong> para que as agências sejam acionadas.</p>
         <table style="width:100%;border-collapse:collapse;margin:16px 0">
           <tr><td style="padding:8px;color:#666">Viajante:</td><td style="padding:8px;font-weight:600">${req.nome_viajante}</td></tr>
-          <tr style="background:#f5f5f5"><td style="padding:8px;color:#666">Centro de Custo:</td><td style="padding:8px">${req.centro_custo || '—'}${req.cod_centro_custo ? ' (' + req.cod_centro_custo + ')' : ''}</td></tr>
+          <tr style="background:#f5f5f5"><td style="padding:8px;color:#666">Centro de Custo:</td><td style="padding:8px">${req.centro_custo || '—'}</td></tr>
           <tr><td style="padding:8px;color:#666">Origem:</td><td style="padding:8px">${origem}</td></tr>
           <tr style="background:#f5f5f5"><td style="padding:8px;color:#666">Destino:</td><td style="padding:8px;font-weight:600">${req.destino_cidade} / ${req.destino_estado || ''}</td></tr>
           <tr><td style="padding:8px;color:#666">Período:</td><td style="padding:8px;font-weight:600">${dataIda} → ${dataVolta}</td></tr>
@@ -178,7 +183,7 @@ function enviarEmailAprovacaoSetor(reqID, req) {
         <p>Selecione a agência aprovada:</p>
         <table style="width:100%;border-collapse:collapse;margin:12px 0 20px">
           <tr><td style="padding:8px;color:#666">Viajante:</td><td style="padding:8px;font-weight:600">${req.nome_viajante}</td></tr>
-          <tr style="background:#f5f5f5"><td style="padding:8px;color:#666">Centro de Custo:</td><td style="padding:8px">${req.centro_custo || '—'}${req.cod_centro_custo ? ' (' + req.cod_centro_custo + ')' : ''}</td></tr>
+          <tr style="background:#f5f5f5"><td style="padding:8px;color:#666">Centro de Custo:</td><td style="padding:8px">${req.centro_custo || '—'}</td></tr>
           <tr><td style="padding:8px;color:#666">Destino:</td><td style="padding:8px;font-weight:600">${req.destino_cidade} / ${req.destino_estado || ''}</td></tr>
           <tr style="background:#f5f5f5"><td style="padding:8px;color:#666">Período:</td><td style="padding:8px;font-weight:600">${dataIda} → ${dataVolta}</td></tr>
           <tr><td style="padding:8px;color:#666">Serviços:</td><td style="padding:8px">${req.tipo_servico || '—'}</td></tr>
@@ -238,7 +243,7 @@ function dispararEmailAgencias(reqID, viajante, solicitacao, classificacao) {
     const assentoRow = solicitacao.assento_especial
       ? `<tr><td style="padding:8px;color:#666">💺 Assento especial:</td><td style="padding:8px"><strong>${solicitacao.assento_especial}</strong>${solicitacao.motivo_assento_especial ? ' — ' + solicitacao.motivo_assento_especial : ''}</td></tr>` : '';
     const bagRow = solicitacao.bagagem_extra
-      ? `<tr><td style="padding:8px;color:#666">Bagagem extra:</td><td style="padding:8px">Sim — despachar bagagem</td></tr>` : '';
+      ? `<tr><td style="padding:8px;color:#666">Bagagem extra:</td><td style="padding:8px">🧳 Sim — despachar bagagem</td></tr>` : '';
 
     // Bloco de preferência do viajante — se preenchida
     const temVoo   = solicitacao.preferencia_voo_cia   && solicitacao.preferencia_voo_cia   !== '';
@@ -260,7 +265,7 @@ function dispararEmailAgencias(reqID, viajante, solicitacao, classificacao) {
       let linhasHotel = '';
       if (temHotel) {
         linhasHotel = `
-          <tr><td colspan="2" style="padding:8px;background:#E3F2FD;font-weight:700;color:#0086FF">Hospedagem de Referência</td></tr>
+          <tr><td colspan="2" style="padding:8px;background:#E3F2FD;font-weight:700;color:#0086FF">🏨 Hospedagem de Referência</td></tr>
           <tr><td style="padding:6px 8px;color:#666">Hotel</td><td style="padding:6px 8px;font-weight:600">${solicitacao.preferencia_hotel_nome}</td></tr>
           <tr style="background:#f5f5f5"><td style="padding:6px 8px;color:#666">Categoria</td><td style="padding:6px 8px">${solicitacao.preferencia_hotel_estrelas || '—'} ★</td></tr>`;
       }
@@ -289,7 +294,7 @@ function dispararEmailAgencias(reqID, viajante, solicitacao, classificacao) {
                 <td style="padding:8px;font-weight:600">${viajante.nome}</td></tr>
             <tr style="background:#f5f5f5">
                 <td style="padding:8px;color:#666">Centro de Custo:</td>
-                <td style="padding:8px">${viajante.centro_custo || '—'}${viajante.cod_centro_custo ? ' (' + viajante.cod_centro_custo + ')' : ''}</td></tr>
+                <td style="padding:8px">${viajante.centro_custo || '—'}</td></tr>
             <tr><td style="padding:8px;color:#666">Origem:</td>
                 <td style="padding:8px">${origem}</td></tr>
             <tr style="background:#f5f5f5">
@@ -493,9 +498,9 @@ function notificarSetorMatchEncontrado(req, candidato, tipo) {
   const cfg = getConfig();
   // L1-C: e-mail de match enriquecido com dados de ambas as solicitações
   const tipoLabel = {
-    TOTAL:    'Quarto compartilhado + Mesmo veículo',
-    PARCIAL_A:'Quarto compartilhado | Veículos separados',
-    PARCIAL_B:'Quartos separados   | Mesmo veículo',
+    TOTAL:    '🏨 Quarto compartilhado + 🚗 Mesmo veículo',
+    PARCIAL_A:'🏨 Quarto compartilhado | 🚗 Veículos separados',
+    PARCIAL_B:'🏨 Quartos separados   | 🚗 Mesmo veículo',
   }[tipo] || tipo;
 
   const fmtData = (d) => {
@@ -506,7 +511,7 @@ function notificarSetorMatchEncontrado(req, candidato, tipo) {
   const html = `
     <div style="font-family:sans-serif;max-width:640px;margin:auto">
       <div style="background:#5c6bc0;padding:20px;border-radius:8px 8px 0 0">
-        <h2 style="color:#fff;margin:0">Viagem Similar Identificada</h2>
+        <h2 style="color:#fff;margin:0">🔔 Viagem Similar Identificada</h2>
         <p style="color:#e8eaf6;margin:4px 0 0">Tipo de compatibilidade: <strong>${tipoLabel}</strong></p>
       </div>
       <div style="background:#fff;padding:24px;border:1px solid #e0e0e0;border-top:none">
@@ -525,8 +530,8 @@ function notificarSetorMatchEncontrado(req, candidato, tipo) {
                 <td style="padding:8px;font-weight:600">${req.nome_viajante || req.req_id}</td>
                 <td style="padding:8px;font-weight:600">${candidato.nome_viajante || candidato.req_id}</td></tr>
             <tr style="background:#f5f5f5"><td style="padding:8px;color:#666">Centro de Custo</td>
-                <td style="padding:8px">${req.centro_custo || '—'}${req.cod_centro_custo ? ' (' + req.cod_centro_custo + ')' : ''}</td>
-                <td style="padding:8px">${candidato.centro_custo || '—'}${candidato.cod_centro_custo ? ' (' + candidato.cod_centro_custo + ')' : ''}</td></tr>
+                <td style="padding:8px">${req.centro_custo || '—'}</td>
+                <td style="padding:8px">${candidato.centro_custo || '—'}</td></tr>
             <tr><td style="padding:8px;color:#666">Destino</td>
                 <td style="padding:8px;font-weight:600">${req.destino_cidade || '—'}</td>
                 <td style="padding:8px;font-weight:600">${candidato.destino_cidade || '—'}</td></tr>
@@ -630,3 +635,21 @@ function formatBRL(valor) {
 }
 
 function props() { return PropertiesService.getScriptProperties(); }
+
+/**
+ * Tenta gerar o PDF da solicitação para anexo de e-mail.
+ * Retorna array com o blob (para GmailApp attachments) ou [] em caso de falha.
+ * Não propaga erros — o envio de e-mail não deve falhar por causa do PDF.
+ */
+function _gerarAnexoPDF(reqID, viajante, solicitacao, classificacao) {
+  try {
+    const blob = gerarPDFSolicitacao(reqID, viajante, solicitacao, classificacao);
+    if (blob) {
+      Logger.log(`[PDF] Gerado com sucesso para ${reqID}`);
+      return [blob];
+    }
+  } catch(err) {
+    Logger.log(`[PDF] Falha ao gerar PDF para ${reqID}: ${err.message}`);
+  }
+  return [];
+}
