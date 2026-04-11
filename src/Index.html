@@ -412,10 +412,7 @@ const SESSION_CPF   = '<?= sessionCpf ?>';
 const SESSION_NOME  = '<?= sessionNome ?>';
 const SESSION_EMAIL = '<?= sessionEmail ?>';
 const SESSION_TOKEN = '<?= sessionToken ?>';
-
-// B1: lista de valores que representam modalidades de serviço (evita capturar outros checkboxes)
-const SERVICOS_VALIDOS = ['Aereo', 'Rodoviario', 'Hospedagem', 'Carro'];
-
+  const WEBAPP_URL    = '<?= webAppUrl ?>';
 // ── Estado da aplicação ──────────────────────────────────────
 const estado = {
   operador: null,
@@ -595,7 +592,13 @@ function fazerLogout() {
     google.script.run.doPost_proxy({ acao: 'logoutUsuario', token: SESSION_TOKEN });
   }
   sessionStorage.clear();
-  window.top.location.href = window.top.location.href.split('?')[0];
+  // Form submit navega o frame pai sem exigir gesto (sandbox GAS)
+  var form = document.createElement('form');
+  form.method = 'GET';
+  form.action = WEBAPP_URL;
+  form.target = '_top';
+  document.body.appendChild(form);
+  form.submit();
 }
 
 // ── Navegação ────────────────────────────────────────────────
