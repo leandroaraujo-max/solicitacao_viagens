@@ -236,6 +236,8 @@ function enviarEmailAprovacaoSetor(reqID, req) {
 
   const dataIda   = req.data_ida   ? Utilities.formatDate(new Date(req.data_ida),   'America/Sao_Paulo', 'dd/MM/yyyy') : '&#8212;';
   const dataVolta = req.data_volta ? Utilities.formatDate(new Date(req.data_volta), 'America/Sao_Paulo', 'dd/MM/yyyy') : '&#8212;';
+  const _fmtCpf = (c) => { const s = String(c||'').replace(/\D/g,'').padStart(11,'0'); return s.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/,'$1.$2.$3-$4'); };
+  const _fmtNasc = (d) => { if (!d) return '&#8212;'; try { return Utilities.formatDate(new Date(d),'America/Sao_Paulo','dd/MM/yyyy'); } catch(e) { return String(d); } };
   const obsRow = req.observacoes_viajante
     ? `<tr><td style="padding:8px;color:#666">Observa&#231;&#245;es:</td><td style="padding:8px">${req.observacoes_viajante}</td></tr>` : '';
 
