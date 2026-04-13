@@ -264,32 +264,9 @@
       <div id="categoriaHospedagem" class="categoria-badge"></div>
 
       <div id="blocoExcecaoSaude" class="field-group hidden">
-        <label class="check-opt destaque">
-          <input type="checkbox" id="chkExcecao" onchange="onExcecaoChange(this)">
-          Solicitar quarto individual por condição de saúde
-        </label>
-
-        <div id="camposExcecao" class="excecao-form hidden">
-          <!-- L3-D: tipo de condição removido; CID opcional -->
-          <div class="field-group">
-            <label for="excecaoCID">CID <span style="font-size:11px;color:#888">(opcional — não exigido por lei)</span></label>
-            <input type="text" id="excecaoCID" placeholder="Ex: G47.3" maxlength="10" />
-          </div>
-          <div class="field-group">
-            <label for="excecaoLaudo">Laudo médico (PDF obrigatório, máx 5 MB) <span class="req">*</span></label>
-            <input type="file" id="excecaoLaudo" accept=".pdf" onchange="validarLaudo(this)" />
-            <span id="laudoStatus" class="field-hint"></span>
-          </div>
-          <div class="field-group">
-            <label for="excecaoValidade">Validade do laudo <span class="req">*</span></label>
-            <input type="date" id="excecaoValidade" />
-          </div>
-          <div class="field-group">
-            <label for="excecaoObs">Observações adicionais</label>
-            <textarea id="excecaoObs" rows="2" placeholder="Informações complementares (opcional)"></textarea>
-          </div>
-
-        </div>
+        <!-- Preenchido dinamicamente por onServicoChange():
+             - Se condicaoEspecialPreAprovada: banner verde informativo
+             - Se não: nenhuma ação (laudo é tratado no cadastro, não na solicitação) -->
       </div>
     </div>
 
@@ -864,14 +841,20 @@ function onServicoChange() {
     const bloco = document.getElementById('blocoExcecaoSaude');
     if (bloco) {
       if (estado.condicaoEspecialPreAprovada) {
-        // Condição já cadastrada com laudo válido — mostra mensagem e oculta form
+        // Condição já cadastrada com laudo válido — mostra banner informativo
         bloco.classList.remove('hidden');
-        bloco.innerHTML = '<div class="info-box" style="background:#e8f5e9;border-left:4px solid #2e7d32;padding:12px">' +
-          '✅ <strong>Condição especial já validada no seu cadastro.</strong><br>' +
-          'O quarto individual será solicitado automaticamente. Não é necessário enviar novo laudo.' +
+        const tipo = estado.viajante.sono_disturbio ? 'Distúrbio do sono' :
+                     estado.viajante.mobilidade_restrita ? 'PCD / Mobilidade reduzida' :
+                     estado.viajante.outra_condicao ? 'Condição especial' : 'Condição de saúde';
+        bloco.innerHTML = '<div style="background:#e8f5e9;border-left:4px solid #2e7d32;padding:12px;border-radius:0 4px 4px 0;margin-top:8px">' +
+          '<strong style="color:#2e7d32">✅ Quarto individual habilitado</strong><br>' +
+          '<span style="font-size:13px;color:#555">Condição: <strong>' + tipo + '</strong> — validada no cadastro. ' +
+          'O quarto individual será solicitado automaticamente.</span>' +
           '</div>';
       } else {
-        bloco.classList.remove('hidden');
+        // Sem condição cadastrada — nenhum formulário extra (laudo é tratado no cadastro)
+        bloco.classList.add('hidden');
+        bloco.innerHTML = '';
       }
     }
   }
@@ -899,33 +882,9 @@ function verificarAlertoLeito() {
   document.getElementById('optLeito').style.display = noturno ? '' : '';  // sempre visível
 }
 
-// ── Exceção de saúde ─────────────────────────────────────────
-function onExcecaoChange(chk) {
-  document.getElementById('camposExcecao').classList.toggle('hidden', !chk.checked);
-  checarPodeSubmeter();
-}
-
-function validarLaudo(input) {
-  const file   = input.files[0];
-  const status = document.getElementById('laudoStatus');
-  estado.laudoBase64 = null;
-  if (!file) return;
-  if (file.type !== 'application/pdf') {
-    status.textContent = '❌ Apenas PDF.'; status.style.color='#e53935'; input.value=''; return;
-  }
-  if (file.size > 5*1024*1024) {
-    status.textContent = '❌ Máx 5 MB.'; status.style.color='#e53935'; input.value=''; return;
-  }
-  const reader = new FileReader();
-  reader.onload = e => {
-    estado.laudoBase64 = e.target.result.split(',')[1];
-    estado.laudoNome   = file.name;
-    status.textContent = `✅ ${file.name} (${(file.size/1024).toFixed(1)} KB)`;
-    status.style.color = '#2e7d32';
-    checarPodeSubmeter();
-  };
-  reader.readAsDataURL(file);
-}
+// ── Exceção de saúde (automática via cadastro) ───────────────
+// Não há mais formulário de exceção na solicitação.
+// A condição é detectada automaticamente via _verificarCondicaoEspecial().
 
 // ── Perfil viajante ──────────────────────────────────────────
 function renderizarPerfilViajante() {
@@ -962,8 +921,8 @@ function submeterSolicitacao() {
     if (!confirm(`Distância estimada de ${estado.distanciaKm} km — menor que 400 km. Confirma solicitação de aéreo mesmo assim?`)) return;
   }
 
-  const temExcecao = document.getElementById('chkExcecao')?.checked && !estado.condicaoEspecialPreAprovada;
-  if (temExcecao && !estado.laudoBase64) return alertar('O laudo médico em PDF é obrigatório para a exceção de quarto individual.');
+  // Exceção de quarto individual: automática baseada no cadastro
+  const temExcecaoSaude = estado.condicaoEspecialPreAprovada || false;
 
   const getPeriodo = (name) => [...document.querySelectorAll(`input[name="${name}"]:checked`)].map(i=>i.value).join(', ');
   const getRadio   = (name) => (document.querySelector(`input[name="${name}"]:checked`) || {}).value || '';
@@ -1014,15 +973,15 @@ function submeterSolicitacao() {
     // D1 — distância
     distancia_km:            estado.distanciaKm || '',
     aereo_elegivel:          estado.aereoElegivel != null ? (estado.aereoElegivel ? 'Sim' : 'Não') : '',
-    // exceção saúde
-    quarto_excecao_saude:    temExcecao || estado.condicaoEspecialPreAprovada || false,
-    excecao_pre_aprovada:    estado.condicaoEspecialPreAprovada || false,
-    excecao_motivo:          '',   // campo removido (L3-D)
-    excecao_cid:             temExcecao ? document.getElementById('excecaoCID').value    : (estado.viajante.sono_cid || ''),
-    excecao_validade:        temExcecao ? document.getElementById('excecaoValidade').value : (estado.viajante.sono_validade || ''),
-    excecao_obs:             temExcecao ? document.getElementById('excecaoObs').value    : '',
-    laudoBase64:             estado.laudoBase64 || null,
-    laudoNome:               estado.laudoNome   || null,
+    // exceção saúde (automática via cadastro)
+    quarto_excecao_saude:    temExcecaoSaude,
+    excecao_pre_aprovada:    temExcecaoSaude,
+    excecao_motivo:          '',
+    excecao_cid:             temExcecaoSaude ? (estado.viajante.sono_cid || estado.viajante.outra_cid || '') : '',
+    excecao_validade:        temExcecaoSaude ? (estado.viajante.sono_validade || '') : '',
+    excecao_obs:             '',
+    laudoBase64:             null,
+    laudoNome:               null,
     // assento especial
     assento_especial:        (() => {
       const t = [];
@@ -1272,9 +1231,8 @@ function checarPodeAvancar() {
 }
 
 function checarPodeSubmeter() {
-  const temExcecao = document.getElementById('chkExcecao')?.checked;
-  const laudoOk    = !temExcecao || !!estado.laudoBase64 || estado.condicaoEspecialPreAprovada;
-  document.getElementById('btnSubmeter').disabled = !laudoOk;
+  // Exceção de quarto individual é automática — não precisa validar laudo aqui
+  document.getElementById('btnSubmeter').disabled = false;
 }
 
 function setLoading(id, on) {
