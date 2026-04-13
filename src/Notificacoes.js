@@ -383,7 +383,7 @@ function dispararEmailAgencias(reqID, viajante, solicitacao, classificacao) {
         linhasVoo = `
           <tr><td colspan="2" style="padding:8px;background:#E3F2FD;font-weight:700;color:#0086FF">Voo de Refer&#234;ncia</td></tr>
           <tr><td style="padding:6px 8px;color:#666">Voo</td><td style="padding:6px 8px;font-weight:600">${solicitacao.preferencia_voo_cia} ${solicitacao.preferencia_voo_numero}</td></tr>
-          <tr style="background:#f5f5f5"><td style="padding:6px 8px;color:#666">Partida</td><td style="padding:6px 8px">${solicitacao.preferencia_voo_saida || '&#8212;'}</td></tr>
+          <tr style="background:#f5f5f5"><td style="padding:6px 8px;color:#666">Partida</td><td style="padding:6px 8px">${solicitacao.preferencia_voo_saida ? (function(d){ try { return Utilities.formatDate(new Date(d),'America/Sao_Paulo','dd/MM/yyyy HH:mm'); } catch(e) { return String(d); } })(solicitacao.preferencia_voo_saida) : '&#8212;'}</td></tr>
           <tr><td style="padding:6px 8px;color:#666">Bagagem</td><td style="padding:6px 8px">${bagagem}</td></tr>
           <tr style="background:#f5f5f5"><td style="padding:6px 8px;color:#666">Paradas</td><td style="padding:6px 8px">${paradas}</td></tr>
           <tr><td style="padding:6px 8px;color:#666">Valor refer&#234;ncia</td><td style="padding:6px 8px;font-weight:700">R$ ${parseFloat(solicitacao.preferencia_voo_valor || 0).toFixed(2)}</td></tr>`;
@@ -768,19 +768,24 @@ function _enriquecerViajante(cpfOuMatricula) {
 }
 
 function montarTabelaComparativa(req) {
+  const _fmtDt = (d) => {
+    if (!d) return '-';
+    try { return Utilities.formatDate(new Date(d), 'America/Sao_Paulo', 'dd/MM/yyyy HH:mm'); }
+    catch(e) { return String(d); }
+  };
   const linhas = [
     ['Companhia / Hotel', req.cotacao_tastur_aero_cia  || req.cotacao_tastur_hotel_nome  || '-',
                           req.cotacao_kontrip_aero_cia || req.cotacao_kontrip_hotel_nome || '-'],
     ['Valor Total',       formatBRL(req.cotacao_tastur_aero_valor    || req.cotacao_tastur_hotel_total    || 0),
                           formatBRL(req.cotacao_kontrip_aero_valor   || req.cotacao_kontrip_hotel_total   || 0)],
-    ['Saída / Check-in',  req.cotacao_tastur_aero_saida  || req.cotacao_tastur_hotel_checkin  || '-',
-                          req.cotacao_kontrip_aero_saida || req.cotacao_kontrip_hotel_checkin || '-'],
+    ['Sa&#237;da / Check-in',  _fmtDt(req.cotacao_tastur_aero_saida  || req.cotacao_tastur_hotel_checkin),
+                          _fmtDt(req.cotacao_kontrip_aero_saida || req.cotacao_kontrip_hotel_checkin)],
     ['Bagagem inclusa',   req.cotacao_tastur_aero_bagagem  ? 'Sim' : 'N&#227;o',
                           req.cotacao_kontrip_aero_bagagem ? 'Sim' : 'N&#227;o'],
-    ['Rodoviário',        req.cotacao_tastur_rodov_empresa  || '-',
+    ['Rodovi&#225;rio',        req.cotacao_tastur_rodov_empresa  || '-',
                           req.cotacao_kontrip_rodov_empresa || '-'],
-    ['Validade cotação',  req.cotacao_tastur_aero_validade  || '-',
-                          req.cotacao_kontrip_aero_validade || '-'],
+    ['Validade cota&#231;&#227;o',  _fmtDt(req.cotacao_tastur_aero_validade),
+                          _fmtDt(req.cotacao_kontrip_aero_validade)],
   ];
 
   const linhasHtml = linhas.map(([label, t, k]) =>

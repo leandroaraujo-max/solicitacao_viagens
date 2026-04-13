@@ -347,18 +347,18 @@ function verificarConclusaoVouchers(reqID, req) {
 function enviarVouchersAoViajante(req) {
   const cfg   = getConfig();
   const links = [
-    req.voucher_aereo_link  ? `<li><a href="${req.voucher_aereo_link}">🛫 Voucher Aéreo</a></li>` : '',
-    req.voucher_hotel_link  ? `<li><a href="${req.voucher_hotel_link}">🏨 Voucher Hospedagem</a></li>` : '',
-    req.voucher_carro_link  ? `<li><a href="${req.voucher_carro_link}">🚗 Voucher Carro</a></li>` : '',
+    req.voucher_aereo_link  ? `<li><a href="${req.voucher_aereo_link}">&#9992; Voucher A&#233;reo</a></li>` : '',
+    req.voucher_hotel_link  ? `<li><a href="${req.voucher_hotel_link}">&#127976; Voucher Hospedagem</a></li>` : '',
+    req.voucher_carro_link  ? `<li><a href="${req.voucher_carro_link}">&#128663; Voucher Carro</a></li>` : '',
   ].join('');
 
-  GmailApp.sendEmail(req.email || '', `✈ Vouchers da sua viagem — ${req.req_id}`, '', {
+  GmailApp.sendEmail(req.email || '', `[Viagens Magalu] Vouchers da sua viagem - ${req.req_id}`, '', {
     htmlBody: `
       <div style="font-family:sans-serif;max-width:540px">
-        <h2 style="color:#0086FF">Seus vouchers estão prontos!</h2>
-        <p>Olá, <strong>${req.nome_viajante}</strong>! Seguem os documentos da sua viagem para <strong>${req.destino_cidade}</strong>:</p>
+        <h2 style="color:#0086FF">Seus vouchers est&#227;o prontos!</h2>
+        <p>Ol&#225;, <strong>${req.nome_viajante}</strong>! Seguem os documentos da sua viagem para <strong>${req.destino_cidade}</strong>:</p>
         <ul>${links}</ul>
-        <p>Boas viagens! 🌟</p>
+        <p>Boas viagens! &#11088;</p>
       </div>`,
     name: 'Sistema de Viagens Magalu',
   });
