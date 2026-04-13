@@ -120,10 +120,12 @@ function submeterSolicitacao(payload) {
     payload.quarto_excecao_saude || false, '', '', '',
     // Status geral + agência
     'Pendente Aprovação Liderança', '',
-    // Cotações Tastur + Kontrip — 39 colunas cada = 78 vazias
-    ...Array(78).fill(''),
-    // Voucher (5)
+    // Cotações Tastur + Kontrip — 38 colunas cada = 76 vazias
+    ...Array(76).fill(''),
+    // Voucher (5): aereo_link, hotel_link, carro_link, upload_em, concluido_em
     '', '', '', '', '',
+    // Reserva (2 colunas sem header)
+    '', '',
     // B2+B3: campos extras ao final para não deslocar colunas existentes
     payload.assento_especial        || '',
     payload.motivo_assento_especial || '',
@@ -288,7 +290,7 @@ function submeterCotacaoAgencia(payload) {
     campos[`${prefixo}_aero_bagagem`]    = payload.aereo.bagagem        || false;
     campos[`${prefixo}_aero_conexao`]    = payload.aereo.conexao        || false;
     campos[`${prefixo}_aero_escala`]     = payload.aereo.escala         || '';
-    campos[`${prefixo}_aero_valor`]      = payload.aereo.valor          || 0;
+    campos[`${prefixo}_aero_valor`]      = payload.aereo.valor != null ? Number(payload.aereo.valor) : 0;
     campos[`${prefixo}_aero_validade`]   = payload.aereo.validade       || '';
   }
   // Hospedagem
@@ -297,8 +299,8 @@ function submeterCotacaoAgencia(payload) {
     campos[`${prefixo}_hotel_endereco`]  = payload.hospedagem.endereco  || '';
     campos[`${prefixo}_hotel_checkin`]   = payload.hospedagem.checkin   || '';
     campos[`${prefixo}_hotel_checkout`]  = payload.hospedagem.checkout  || '';
-    campos[`${prefixo}_hotel_diaria`]    = payload.hospedagem.diaria    || 0;
-    campos[`${prefixo}_hotel_total`]     = payload.hospedagem.total     || 0;
+    campos[`${prefixo}_hotel_diaria`]    = payload.hospedagem.diaria != null ? Number(payload.hospedagem.diaria) : 0;
+    campos[`${prefixo}_hotel_total`]     = payload.hospedagem.total  != null ? Number(payload.hospedagem.total) : 0;
     campos[`${prefixo}_hotel_categoria`] = payload.hospedagem.categoria || '';
     campos[`${prefixo}_hotel_regime`]    = payload.hospedagem.regime    || '';
     campos[`${prefixo}_hotel_cancelamento`] = payload.hospedagem.cancelamento || '';
@@ -312,7 +314,7 @@ function submeterCotacaoAgencia(payload) {
     campos[`${prefixo}_carro_devolucao`] = payload.carro.devolucao      || '';
     campos[`${prefixo}_carro_local`]     = payload.carro.local          || '';
     campos[`${prefixo}_carro_seguro`]    = payload.carro.seguro         || false;
-    campos[`${prefixo}_carro_valor`]     = payload.carro.valor          || 0;
+    campos[`${prefixo}_carro_valor`]     = payload.carro.valor != null ? Number(payload.carro.valor) : 0;
   }
   // A5 — Rodoviário
   if (payload.rodoviario) {
@@ -322,7 +324,7 @@ function submeterCotacaoAgencia(payload) {
     campos[`${prefixo}_rodov_partida`]   = payload.rodoviario.partida   || '';
     campos[`${prefixo}_rodov_chegada`]   = payload.rodoviario.chegada   || '';
     campos[`${prefixo}_rodov_tipo_onibus`] = payload.rodoviario.tipo_onibus || '';
-    campos[`${prefixo}_rodov_valor`]     = payload.rodoviario.valor     || 0;
+    campos[`${prefixo}_rodov_valor`]     = payload.rodoviario.valor != null ? Number(payload.rodoviario.valor) : 0;
   }
   campos[`${prefixo}_obs`]               = payload.obs                  || '';
   campos[`${prefixo}_enviado_em`]        = new Date();
@@ -350,7 +352,13 @@ function submeterCotacaoAgencia(payload) {
 
     Object.entries(campos).forEach(([col, val]) => {
       const idx = header.indexOf(col);
-      if (idx >= 0) sheet.getRange(i + 1, idx + 1).setValue(val);
+      if (idx >= 0) {
+        const cell = sheet.getRange(i + 1, idx + 1);
+        cell.setValue(val);
+        if (col.endsWith('_valor') || col.endsWith('_diaria') || col.endsWith('_total')) {
+          cell.setNumberFormat('#,##0.00');
+        }
+      }
     });
 
     // Atualiza status para 'Cotação Parcial' ou 'Pendente Aprovação Setor'

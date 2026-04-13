@@ -96,12 +96,17 @@ function doPost(e) {
     submeterCotacaoAgencia:   () => submeterCotacaoAgencia(payload),
     uploadVoucher:            () => uploadVoucher(payload),
     aprovarExcecaoRH:         () => aprovarExcecaoRH(payload),
+    carregarSolicitacaoAgencia: () => carregarSolicitacaoAgencia(payload.reqID, payload.agencia),
+    calcularDistancia:        () => calcularDistanciaKm(payload.origem, payload.destino),
+    listarSolicitacoes:       () => listarSolicitacoes(payload.cpf),
+    vincularSolicitacoes:     () => vincularSolicitacoes(payload.reqID1, payload.reqID2, payload.operadorEmail),
     // ── Depuração MCP (leitura de planilha via HTTP) ─────────
     _debug_lerAba:            () => _debugLerAba(payload.aba, payload.maxRows),
     _debug_cabecalho:         () => _debugCabecalho(payload.aba),
     _debug_buscarLinha:       () => _debugBuscarLinha(payload.aba, payload.coluna, payload.valor),
     _debug_deletarLinha:      () => _debugDeletarLinha(payload.aba, payload.coluna, payload.valor),
     _debug_migrarViajantes:   () => { TESTE_migrarViajantesHeader(); return { ok: true }; },
+    _debug_migrarSolicitacoesHeader: () => { _migrarSolicitacoesHeader(); return { ok: true }; },
   };
 
   try {
@@ -638,6 +643,45 @@ function TESTE_migrarViajantesHeader() {
 
   Logger.log('Migração concluída. Header atualizado com telefone/rg/data_nascimento.');
   Logger.log('Novo header: ' + aba.getRange(1, 1, 1, aba.getLastColumn()).getValues()[0].join(', '));
+}
+
+/**
+ * Migração: nomeia as 3 colunas sem header no final da aba Solicitacoes
+ * (assento_especial, motivo_assento_especial, cod_centro_custo)
+ */
+function _migrarSolicitacoesHeader() {
+  const cfg = getConfig();
+  const ss  = SpreadsheetApp.openById(cfg.SHEET_ID);
+  const aba = ss.getSheetByName('Solicitacoes');
+  if (!aba) { Logger.log('Aba Solicitacoes não encontrada.'); return; }
+
+  const lastCol = aba.getLastColumn();
+  const hdr = aba.getRange(1, 1, 1, lastCol).getValues()[0];
+
+  // Procura "concluido_em" — os 3 campos extras vêm logo após as 2 colunas reserva
+  const idxConcluido = hdr.indexOf('concluido_em');
+  if (idxConcluido < 0) { Logger.log('Coluna concluido_em não encontrada.'); return; }
+
+  // As 3 colunas a nomear ficam nas posições idxConcluido+3, +4, +5 (após 2 reserva)
+  const nomes = ['assento_especial', 'motivo_assento_especial', 'cod_centro_custo'];
+  const inicio = idxConcluido + 3; // pula 2 colunas reserva (posições +1 e +2)
+
+  for (let i = 0; i < nomes.length; i++) {
+    const col = inicio + i; // 0-based
+    const atual = col < hdr.length ? String(hdr[col]) : '';
+    if (atual === nomes[i]) {
+      Logger.log(`Coluna ${nomes[i]} já nomeada na posição ${col + 1}.`);
+      continue;
+    }
+    if (atual !== '') {
+      Logger.log(`AVISO: posição ${col + 1} contém "${atual}" em vez de vazio. Pulando.`);
+      continue;
+    }
+    aba.getRange(1, col + 1).setValue(nomes[i]); // 1-based
+    Logger.log(`Nomeada coluna ${col + 1}: ${nomes[i]}`);
+  }
+
+  Logger.log('Migração Solicitacoes concluída.');
 }
 
 function TESTE_diagnosticoEmailSetor() {
