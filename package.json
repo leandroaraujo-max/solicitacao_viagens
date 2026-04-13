@@ -16,8 +16,6 @@
     "url": "https://script.google.com/macros/s/AKfycbzi3Cy5rJ2pB2QH1B7p-d7HUw9xNPwF1pUrUS6lDRmznQ-Ss1X2js_YNr3wK6vBSTTh/exec"
   },
   "devDependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "google-auth-library": "^10.6.2",
-    "googleapis": "^171.4.0"
+    "@modelcontextprotocol/sdk": "^1.29.0"
   }
 }

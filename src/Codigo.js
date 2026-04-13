@@ -96,6 +96,10 @@ function doPost(e) {
     submeterCotacaoAgencia:   () => submeterCotacaoAgencia(payload),
     uploadVoucher:            () => uploadVoucher(payload),
     aprovarExcecaoRH:         () => aprovarExcecaoRH(payload),
+    // ── Depuração MCP (leitura de planilha via HTTP) ─────────
+    _debug_lerAba:            () => _debugLerAba(payload.aba, payload.maxRows),
+    _debug_cabecalho:         () => _debugCabecalho(payload.aba),
+    _debug_buscarLinha:       () => _debugBuscarLinha(payload.aba, payload.coluna, payload.valor),
   };
 
   try {
@@ -193,6 +197,45 @@ function _comLock(fn, timeoutMs) {
 }
 
 // ── Log de erros na planilha ──────────────────────────────────
+
+// ── Funções de depuração MCP (leitura de planilha via doPost) ─
+function _debugLerAba(abaName, maxRows) {
+  const cfg = getConfig();
+  const sheet = SpreadsheetApp.openById(cfg.SHEET_ID).getSheetByName(abaName);
+  if (!sheet) throw new Error('Aba "' + abaName + '" não encontrada.');
+  const limit = Math.min(maxRows || 200, 500);
+  const lastRow = Math.min(sheet.getLastRow(), limit + 1);
+  const lastCol = sheet.getLastColumn();
+  if (lastRow < 1 || lastCol < 1) return { headers: [], rows: [] };
+  const data = sheet.getRange(1, 1, lastRow, lastCol).getValues();
+  const headers = data[0].map(String);
+  const rows = [];
+  for (let i = 1; i < data.length; i++) {
+    const obj = {};
+    headers.forEach((h, j) => { obj[h] = data[i][j]; });
+    rows.push(obj);
+  }
+  return { headers, rows, total: rows.length };
+}
+
+function _debugCabecalho(abaName) {
+  const cfg = getConfig();
+  const sheet = SpreadsheetApp.openById(cfg.SHEET_ID).getSheetByName(abaName);
+  if (!sheet) throw new Error('Aba "' + abaName + '" não encontrada.');
+  const lastCol = sheet.getLastColumn();
+  if (lastCol < 1) return { aba: abaName, colunas: [], total: 0 };
+  const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(String);
+  return { aba: abaName, colunas: headers, total: headers.length };
+}
+
+function _debugBuscarLinha(abaName, coluna, valor) {
+  const { headers, rows } = _debugLerAba(abaName, 500);
+  const encontrados = rows.filter(r =>
+    String(r[coluna] ?? '').toLowerCase().includes(String(valor).toLowerCase())
+  );
+  return { headers, rows: encontrados, total: encontrados.length };
+}
+
 /**
  * Grava um registro de erro na aba 'Logs' para rastreamento.
  * Sempre silencioso — nunca propaga exceção.
