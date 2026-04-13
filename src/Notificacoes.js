@@ -746,16 +746,24 @@ function enviarLembreteAprovacao(req, etapa) {
  */
 function _enriquecerViajante(cpfOuMatricula) {
   let viajante = {};
-  try { viajante = buscarViajante(cpfOuMatricula) || {}; } catch(_) {}
+  const cpfNorm = String(cpfOuMatricula || '').replace(/\D/g,'').padStart(11,'0');
+
+  // 1. Tenta BQ cache (aba Viajantes) — tem cargo, centro_custo, categoria
+  try { viajante = buscarViajante(cpfOuMatricula) || {}; }
+  catch(e) { Logger.log('[_enriquecerViajante] buscarViajante falhou: ' + e.message); }
+
+  // 2. Complementa com aba Usuarios (telefone, rg, data_nascimento)
   try {
-    const perfil = carregarPerfilUsuario(String(cpfOuMatricula || '').replace(/\D/g,'').padStart(11,'0'));
-    if (perfil) {
-      // Sobrescreve campos vazios do BQ com dados do cadastro
-      Object.keys(perfil).forEach(k => {
-        if (perfil[k] && !viajante[k]) viajante[k] = perfil[k];
+    const sheetU = _getSheetUsuarios();
+    const usuario = _buscarUsuarioPorCPF(sheetU, cpfNorm);
+    if (usuario) {
+      ['telefone','rg','data_nascimento','nome','email'].forEach(k => {
+        if (usuario[k] && !viajante[k]) viajante[k] = usuario[k];
       });
     }
-  } catch(_) {}
+  } catch(e) { Logger.log('[_enriquecerViajante] busca Usuarios falhou: ' + e.message); }
+
+  Logger.log('[_enriquecerViajante] cpf=' + cpfNorm + ' tel=' + (viajante.telefone||'-') + ' rg=' + (viajante.rg||'-') + ' nasc=' + (viajante.data_nascimento||'-'));
   return viajante;
 }
 
