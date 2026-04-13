@@ -103,6 +103,13 @@ function doPost(e) {
   };
 
   try {
+    // Rotas _debug exigem API key (proteção contra acesso público)
+    if (acao && acao.startsWith('_debug')) {
+      const apiKey = PropertiesService.getScriptProperties().getProperty('MCP_API_KEY');
+      if (!apiKey || payload._key !== apiKey) {
+        throw new Error('Acesso negado: API key inválida.');
+      }
+    }
     if (!rotas[acao]) throw new Error(`Ação desconhecida: ${acao}`);
     const resultado = rotas[acao]();
     return jsonResponse({ sucesso: true, dados: resultado });
@@ -571,6 +578,11 @@ function migrarSolicitacoesParaV2(ss, hdrV2) {
  * Use quando: o status virou "Pendente Aprovação Setor" mas o e-mail não chegou.
  * Execução: editor GAS → selecionar TESTE_diagnosticoEmailSetor → Executar
  */
+function TESTE_setMcpApiKey() {
+  PropertiesService.getScriptProperties().setProperty('MCP_API_KEY', 'k2/d+8hjkJleiAlMFs8qrwjUbhtIRuB9');
+  Logger.log('MCP_API_KEY configurada com sucesso.');
+}
+
 function TESTE_diagnosticoEmailSetor() {
   const MEU_EMAIL = 'leandro.araujo@luizalabs.com';
   const cfg = getConfig();

@@ -2,24 +2,71 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, writeFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { homedir } from 'os';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CONFIG_PATH = join(__dirname, '..', '.mcp-config.json');
+const CLASPRC_PATH = join(homedir(), '.clasprc.json');
 
 function loadConfig() {
   if (!existsSync(CONFIG_PATH)) throw new Error('.mcp-config.json nao encontrado.');
   return JSON.parse(readFileSync(CONFIG_PATH, 'utf-8'));
 }
 
-async function callGAS(url, payload) {
-  if (!url) throw new Error('WEBAPP_URL nao configurada em .mcp-config.json');
-  const resp = await fetch(url, {
+function loadClaspTokens() {
+  if (!existsSync(CLASPRC_PATH)) throw new Error('.clasprc.json nao encontrado em ' + homedir());
+  const rc = JSON.parse(readFileSync(CLASPRC_PATH, 'utf-8'));
+  return rc.tokens && rc.tokens.default ? rc.tokens.default : rc.tokens;
+}
+
+async function refreshToken(tokens) {
+  const resp = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: tokens.client_id,
+      client_secret: tokens.client_secret,
+      refresh_token: tokens.refresh_token,
+      grant_type: 'refresh_token',
+    }),
+  });
+  if (!resp.ok) throw new Error('Falha ao renovar token: ' + resp.status);
+  const data = await resp.json();
+  // Atualiza o clasprc.json com o novo access_token
+  const rc = JSON.parse(readFileSync(CLASPRC_PATH, 'utf-8'));
+  const t = rc.tokens.default || rc.tokens;
+  t.access_token = data.access_token;
+  t.expiry_date = Date.now() + (data.expires_in * 1000);
+  if (data.id_token) t.id_token = data.id_token;
+  writeFileSync(CLASPRC_PATH, JSON.stringify(rc, null, 2), 'utf-8');
+  return data.access_token;
+}
+
+async function getAccessToken() {
+  const tokens = loadClaspTokens();
+  // Se expirado ou expira em menos de 60s, renova
+  if (!tokens.expiry_date || Date.now() > tokens.expiry_date - 60000) {
+    return await refreshToken(tokens);
+  }
+  return tokens.access_token;
+}
+
+async function callGAS(webAppUrl, apiKey, payload) {
+  const token = await getAccessToken();
+  const body = { ...payload };
+  if (payload.acao && payload.acao.startsWith('_debug')) {
+    body._key = apiKey;
+  }
+  const resp = await fetch(webAppUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + token,
+    },
+    body: JSON.stringify(body),
     redirect: 'follow',
   });
   const text = await resp.text();
@@ -29,7 +76,7 @@ async function callGAS(url, payload) {
     return json.dados !== undefined ? json.dados : json;
   } catch (e) {
     if (e.message.includes('Erro')) throw e;
-    throw new Error('Resposta inesperada: ' + text.slice(0, 500));
+    throw new Error('Resposta inesperada: ' + text.slice(0, 300));
   }
 }
 
@@ -51,16 +98,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
   const cfg = loadConfig();
   const URL = cfg.WEBAPP_URL;
+  const KEY = cfg.MCP_API_KEY || '';
   try {
     let resultado;
     if (name === 'sheets_ler_aba') {
-      resultado = await callGAS(URL, { acao: '_debug_lerAba', aba: args.aba, maxRows: args.maxRows || 200 });
+      resultado = await callGAS(URL, KEY, { acao: '_debug_lerAba', aba: args.aba, maxRows: args.maxRows || 200 });
     } else if (name === 'sheets_buscar_linha') {
-      resultado = await callGAS(URL, { acao: '_debug_buscarLinha', aba: args.aba, coluna: args.coluna, valor: args.valor });
+      resultado = await callGAS(URL, KEY, { acao: '_debug_buscarLinha', aba: args.aba, coluna: args.coluna, valor: args.valor });
     } else if (name === 'sheets_cabecalho') {
-      resultado = await callGAS(URL, { acao: '_debug_cabecalho', aba: args.aba });
+      resultado = await callGAS(URL, KEY, { acao: '_debug_cabecalho', aba: args.aba });
     } else if (name === 'gas_executar') {
-      resultado = await callGAS(URL, { acao: args.acao, ...(args.payload || {}) });
+      resultado = await callGAS(URL, KEY, { acao: args.acao, ...(args.payload || {}) });
     } else {
       throw new Error('Ferramenta desconhecida: ' + name);
     }
