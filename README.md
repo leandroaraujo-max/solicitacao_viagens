@@ -2,9 +2,9 @@
 
 > **Projeto:** Automação do processo de viagens corporativas Magalu / Luizalabs  
 > **Stack:** Google Apps Script · BigQuery · Google Sheets · Google Drive · Duffel Flights API  
-> **Status:** Em desenvolvimento — Deploy @86  
+> **Status:** Em produção — Deploy @89  
 > **Data de início:** 08/04/2026  
-> **Último deploy:** 13/04/2026 — @86  
+> **Último deploy:** 13/04/2026 — @89  
 
 ---
 
@@ -33,14 +33,15 @@
 | Portal do Viajante (`Index.html`) | Produção |
 | Portal da Agência (`PortalAgencia.html`) | Produção |
 | Portal de Aprovação (`PortalAprovacao.html`) | Produção |
-| Fluxo Liderança -> Pre-aprovação Setor -> Agências | Produção |
+| **Portal do Setor de Viagens (`PortalSetor.html`)** | **Produção** |
+| Fluxo Liderança -> Pré-aprovação Setor -> Agências | Produção |
 | Integração BigQuery (cache-aside por CPF) | Produção |
 | Casamento de solicitações | Produção |
 | Delegações | Produção |
 | Busca consultiva de voos — Duffel API (Azul/Gol/LATAM) | Produção (sandbox) |
 | Busca separada por trecho (Ida / Volta) | Produção |
 | Autocomplete de cidades/aeroportos (Duffel Places) | Produção |
-| Calculo de distância (Geocoder + Haversine) | Produção |
+| Cálculo de distância (Geocoder + Haversine) | Produção |
 | Upload de laudos médicos no Drive | Produção |
 | Upload de vouchers | Produção |
 | SLA checker (time-based trigger) | Produção |
@@ -50,10 +51,14 @@
 | Aba "Minhas Solicitações" com timeline visual | Produção |
 | MCP Server para debugging via VS Code | Produção |
 | Perfil unificado viajante (Sheets + BQ) | Produção |
-| Condição especial PCD/sono com quarto Individual pre-aprovado | Produção |
+| Condição especial PCD/sono com quarto Individual pré-aprovado | Produção |
 | Valores monetários com `setNumberFormat('#,##0.00')` | Produção |
+| **Detecção de perfil `setor` via `EMAILS_SETOR` Script Property** | **Produção** |
+| **Listagem e filtragem de todas as solicitações (Portal Setor)** | **Produção** |
+| **Indicadores KPI e gráficos de volume (Portal Setor)** | **Produção** |
+| **Ações inline de aprovação do setor (Portal Setor)** | **Produção** |
 
-**Deploy ativo:** `AKfycbzi3Cy5rJ2pB2QH1B7p-d7HUw9xNPwF1pUrUS6lDRmznQ-Ss1X2js_YNr3wK6vBSTTh` @86  
+**Deploy ativo:** `AKfycbzi3Cy5rJ2pB2QH1B7p-d7HUw9xNPwF1pUrUS6lDRmznQ-Ss1X2js_YNr3wK6vBSTTh` @89  
 **Script ID:** `157FO7diD5kMP3FWh6tkFvPveElKHhVzJKrdPMqTvaQw-sce_wTq4jwXX`
 
 ### Histórico de Deploys
@@ -81,6 +86,9 @@
 | @79-84 | — | feat: MCP Server (clasp OAuth, debug routes, migração Viajantes header) |
 | @85 | `33cb4d8` | feat: rotas carregarSolicitacaoAgencia, listarSolicitacoes, vincularSolicitacoes no doPost |
 | @86 | `9badb78` | fix: Array cotação 78->76, setNumberFormat monetários, nomear headers extras Solicitacoes |
+| @87 | `1ba01f1` | feat: Portal do Setor — Auth perfil setor, routing doGet, listarTodasSolicitacoes, executarAcaoSetorPortal, PortalSetor.html completo |
+| @88 | — | feat: debug routes `_debug_setProperty`, `_debug_getProperty` para configuração via MCP |
+| @89 | `d8dba40` | feat: debug route `_debug_executarDecisao` para teste de aprovações via MCP |
 
 ---
 
@@ -143,7 +151,8 @@ Um **portal web** com uma URL de entrada única, composto por quatro interfaces 
 | **Agência (Tastur / Kontrip)** | Portal Prestador (link exclusivo por reqID) | Insere cotações e vouchers |
 | **Gestor N1** | Link de aprovação por e-mail (token único 72h) | Aprova ou reprova a necessidade da viagem |
 | **Gestor N2** | Link de aprovação por e-mail (fallback SLA ou emergencial) | Aprovação de segundo nível |
-| **Setor de Viagens** | E-mail com tabela comparativa + tokens de decisão | Escolhe a agência vencedora |
+| **Setor de Viagens** | Portal do Setor (autenticado) | Pré-aprovação, gestão de solicitações, indicadores, escolha de agência vencedora |
+| **Membro do Setor (como viajante)** | Portal do Viajante via `?modo=viajante` | Solicita própria viagem sem sair do Portal do Setor |
 
 ---
 
@@ -162,6 +171,7 @@ Um **portal web** com uma URL de entrada única, composto por quatro interfaces 
 | [09 - Delegações](docs/09-delegacoes.md) | Solicitação em nome de terceiros |
 | [10 - Segurança e LGPD](docs/10-seguranca-lgpd.md) | Tokens, laudos, proteções e conformidade |
 | [11 - Pendências e Decisões](docs/11-pendencias-decisao.md) | Pontos em aberto para validação |
+| [12 - Plano de Migração Cloud](docs/12-plano-migracao-cloud.md) | Estratégia de evolução para Firebase Hosting + Cloud Run + Firestore |
 
 ---
 
@@ -199,6 +209,7 @@ src/
 ├── Index.html            — Portal do Viajante (frontend principal)
 ├── PortalAgencia.html    — Portal do Prestador (cotação e vouchers)
 ├── PortalAprovacao.html  — Página de confirmação pós-aprovação
+├── PortalSetor.html      — Portal do Setor de Viagens (gestão, indicadores, aprovações inline)
 └── Estilos.html          — CSS compartilhado entre portais
 docs/                     — Documentação de discovery e especificação
 package.json              — Scripts npm para deploy via clasp
