@@ -233,6 +233,7 @@ function criarOuAtualizarViajante(dadosBQ) {
   ];
 
   _comLock(() => sheet.appendRow(nova));
+  SpreadsheetApp.flush(); // garante gravação antes de leituras subsequentes
   return {
     ...dadosBQ,
     categoria_hospedagem:      catHosp,

@@ -460,7 +460,7 @@ function _atualizarDadosPessoaisViajante(cpf, dados) {
 
   Object.entries(dados).forEach(([col, val]) => {
     const idx = hdr.indexOf(col);
-    if (idx >= 0 && val) aba.getRange(rowIdx, idx + 1).setValue(val);
+    if (idx >= 0 && val !== undefined && val !== null) aba.getRange(rowIdx, idx + 1).setValue(val);
   });
   Logger.log('[AUTH] Dados pessoais atualizados em Viajantes para CPF ' + cpf);
 }
@@ -518,11 +518,22 @@ function _atualizarCondicoesEspeciais(cpf, opts) {
     }
   }
 
+  // Se há qualquer condição médica, categoria_hospedagem deve ser Individual
+  if (opts.ehPCD || opts.ehSono || opts.outraCondicao) {
+    const motivos = [];
+    if (opts.ehPCD)          motivos.push('PCD/Mobilidade reduzida');
+    if (opts.ehSono)         motivos.push('Distúrbio do sono');
+    if (opts.outraCondicao)  motivos.push(opts.outraCondicao);
+    updates['categoria_hospedagem'] = 'Individual';
+    updates['motivo_categoria_hosp'] = 'Condição de saúde: ' + motivos.join(', ');
+  }
+
   // Aplica na aba Viajantes
   Object.entries(updates).forEach(function([col, val]) {
     const idx = hdr.indexOf(col);
     if (idx >= 0) aba.getRange(rowIdx, idx + 1).setValue(val);
   });
+  SpreadsheetApp.flush();
   Logger.log('[AUTH] Condições especiais atualizadas para CPF ' + cpf);
 }
 
