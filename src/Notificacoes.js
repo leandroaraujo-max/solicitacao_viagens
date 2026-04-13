@@ -27,20 +27,13 @@ function rodapeEmail(cfg) {
 function enviarEmailAprovacaoLideranca(reqID, viajante, solicitacao, classificacao, cadeia) {
   const cfg = getConfig();
 
-  // Enriquece viajante com dados completos (telefone, rg, data_nascimento, etc.)
+  // Completa viajante com perfil da aba Viajantes (tel, rg, nasc, cargo, cc)
   const cpfBusca = viajante.cpf || solicitacao.cpf_viajante || solicitacao.matricula_viajante || '';
   if (cpfBusca) {
     try {
-      const enriquecido = _enriquecerViajante(cpfBusca);
-      viajante = Object.assign({}, viajante, {
-        telefone:        enriquecido.telefone        || viajante.telefone        || '',
-        rg:              enriquecido.rg               || viajante.rg              || '',
-        data_nascimento: enriquecido.data_nascimento  || viajante.data_nascimento || '',
-        cargo:           enriquecido.cargo            || viajante.cargo           || '',
-        centro_custo:    enriquecido.centro_custo     || viajante.centro_custo    || '',
-        cod_centro_custo:enriquecido.cod_centro_custo || viajante.cod_centro_custo|| '',
-      });
-    } catch(e) { Logger.log('[LIDERANÇA] Falha ao enriquecer viajante: ' + e.message); }
+      const perfil = buscarViajante(cpfBusca) || {};
+      viajante = Object.assign({}, viajante, perfil);
+    } catch(e) { Logger.log('[LIDERANÇA] buscarViajante falhou: ' + e.message); }
   }
 
   // C2 — verifica férias do N1
@@ -159,8 +152,10 @@ function enviarEmailPreAprovacaoSetor(reqID, req) {
   const email = (props().getProperty('DL_VIAGENS') || cfg.EMAIL_VIAGENS || '').toLowerCase();
   if (!email) { Logger.log(`[AVISO] Sem DL_VIAGENS/EMAIL_VIAGENS para pré-aprovação de ${reqID}`); return; }
 
-  // Enriquece com dados completos do viajante (centro_custo, telefone, etc.)
-  const viajante = _enriquecerViajante(req.cpf_viajante || req.matricula_viajante || '');
+  // Busca perfil completo do viajante (aba Viajantes — tel, rg, nasc, cargo, cc)
+  let viajante = {};
+  try { viajante = buscarViajante(req.cpf_viajante || req.matricula_viajante || '') || {}; }
+  catch(e) { Logger.log('[PRÉ-APROVAÇÃO] buscarViajante falhou: ' + e.message); }
 
   const tokens  = gerarTokensPreAprovacao(reqID, email);
   const dataIda   = req.data_ida   ? Utilities.formatDate(new Date(req.data_ida),   'America/Sao_Paulo', 'dd/MM/yyyy') : '&#8212;';
@@ -243,7 +238,9 @@ function enviarEmailAprovacaoSetor(reqID, req) {
 
   const tokens = gerarTokensSetor(reqID, email);
   const tabelaCotacao = montarTabelaComparativa(req);
-  const viajante = _enriquecerViajante(req.cpf_viajante || req.matricula_viajante || '');
+  let viajante = {};
+  try { viajante = buscarViajante(req.cpf_viajante || req.matricula_viajante || '') || {}; }
+  catch(e) { Logger.log('[SETOR] buscarViajante falhou: ' + e.message); }
 
   const dataIda   = req.data_ida   ? Utilities.formatDate(new Date(req.data_ida),   'America/Sao_Paulo', 'dd/MM/yyyy') : '&#8212;';
   const dataVolta = req.data_volta ? Utilities.formatDate(new Date(req.data_volta), 'America/Sao_Paulo', 'dd/MM/yyyy') : '&#8212;';
@@ -314,18 +311,13 @@ function enviarEmailAprovacaoSetor(reqID, req) {
 function dispararEmailAgencias(reqID, viajante, solicitacao, classificacao) {
   const cfg = getConfig();
 
-  // Enriquece com dados completos do viajante (telefone, rg, data_nascimento, cargo, centro_custo)
+  // Completa viajante com perfil da aba Viajantes (tel, rg, nasc, cargo, cc)
   const cpfBusca = viajante.cpf || solicitacao.cpf_viajante || solicitacao.matricula_viajante || '';
   if (cpfBusca) {
-    const enriquecido = _enriquecerViajante(cpfBusca);
-    viajante = Object.assign({}, viajante, {
-      telefone:        enriquecido.telefone        || viajante.telefone        || '',
-      rg:              enriquecido.rg               || viajante.rg              || '',
-      data_nascimento: enriquecido.data_nascimento  || viajante.data_nascimento || '',
-      cargo:           enriquecido.cargo            || viajante.cargo           || '',
-      centro_custo:    enriquecido.centro_custo     || viajante.centro_custo    || '',
-      cod_centro_custo:enriquecido.cod_centro_custo || viajante.cod_centro_custo|| '',
-    });
+    try {
+      const perfil = buscarViajante(cpfBusca) || {};
+      viajante = Object.assign({}, viajante, perfil);
+    } catch(e) { Logger.log('[AGÊNCIAS] buscarViajante falhou: ' + e.message); }
   }
 
   const agencias = [
@@ -739,33 +731,6 @@ function enviarLembreteAprovacao(req, etapa) {
 }
 
 // ── Helpers ──────────────────────────────────────────────────
-
-/**
- * Busca dados completos do viajante: BQ cache (Viajantes) + cadastro (Usuarios).
- * Garante telefone, RG e data_nascimento mesmo se BQ não tiver.
- */
-function _enriquecerViajante(cpfOuMatricula) {
-  let viajante = {};
-  const cpfNorm = String(cpfOuMatricula || '').replace(/\D/g,'').padStart(11,'0');
-
-  // 1. Tenta BQ cache (aba Viajantes) — tem cargo, centro_custo, categoria
-  try { viajante = buscarViajante(cpfOuMatricula) || {}; }
-  catch(e) { Logger.log('[_enriquecerViajante] buscarViajante falhou: ' + e.message); }
-
-  // 2. Complementa com aba Usuarios (telefone, rg, data_nascimento)
-  try {
-    const sheetU = _getSheetUsuarios();
-    const usuario = _buscarUsuarioPorCPF(sheetU, cpfNorm);
-    if (usuario) {
-      ['telefone','rg','data_nascimento','nome','email'].forEach(k => {
-        if (usuario[k] && !viajante[k]) viajante[k] = usuario[k];
-      });
-    }
-  } catch(e) { Logger.log('[_enriquecerViajante] busca Usuarios falhou: ' + e.message); }
-
-  Logger.log('[_enriquecerViajante] cpf=' + cpfNorm + ' tel=' + (viajante.telefone||'-') + ' rg=' + (viajante.rg||'-') + ' nasc=' + (viajante.data_nascimento||'-'));
-  return viajante;
-}
 
 function montarTabelaComparativa(req) {
   const _fmtDt = (d) => {

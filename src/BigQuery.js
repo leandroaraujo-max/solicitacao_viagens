@@ -186,6 +186,7 @@ function criarOuAtualizarViajante(dadosBQ) {
       'matricula','cpf','nome','cargo','cod_categoria','filial','centro_custo',
       'cod_centro_custo','empresa','email','user_name',
       'aprovador_n1_email','aprovador_n1_nome','aprovador_n2_email','aprovador_n2_nome',
+      'telefone','rg','data_nascimento',
       'sono_disturbio','sono_cid','sono_laudo_link','sono_validade','sono_obs',
       'mobilidade_restrita','mobilidade_obs','mobilidade_laudo_link',
       'outra_condicao','outra_cid','outra_laudo_link','outra_obs',
@@ -221,6 +222,8 @@ function criarOuAtualizarViajante(dadosBQ) {
     dadosBQ.aprovador_n1_nome  || '',
     dadosBQ.aprovador_n2_email || '',
     dadosBQ.aprovador_n2_nome  || '',
+    // Dados pessoais — preenchidos pelo cadastro (Auth.js)
+    '', '', '',              // telefone, rg, data_nascimento
     // Necessidades especiais — iniciam vazias
     false, '', '', '', '',   // sono
     false, '', '',           // mobilidade

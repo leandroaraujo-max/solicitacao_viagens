@@ -84,6 +84,13 @@ function cadastrarUsuario(cpf, telefone, rg, dataNascimento, ehPCD, ehSono, outr
     ]));
   }
 
+  // Grava dados pessoais (telefone, rg, nascimento) na aba Viajantes (perfil unificado)
+  _atualizarDadosPessoaisViajante(cpfLimpo, {
+    telefone: telefone || '',
+    rg: rg || '',
+    data_nascimento: dataNascimento || '',
+  });
+
   // Grava condições especiais declaradas na aba Viajantes (cache BQ)
   if (ehPCD || ehSono || outraCondicao) {
     _atualizarCondicoesEspeciais(cpfLimpo, {
@@ -426,6 +433,38 @@ function _enviarEmailSenha(email, nome, senha) {
   );
 }
 
+// ── Dados pessoais no perfil Viajantes ───────────────────────
+
+/**
+ * Grava telefone, RG e data_nascimento na aba Viajantes (perfil unificado).
+ * Chamado por cadastrarUsuario() para centralizar dados pessoais.
+ */
+function _atualizarDadosPessoaisViajante(cpf, dados) {
+  const cfg = getConfig();
+  const aba = SpreadsheetApp.openById(cfg.SHEET_ID).getSheetByName('Viajantes');
+  if (!aba) return;
+
+  const allDados = aba.getDataRange().getValues();
+  const hdr = allDados[0];
+  const idxCPF = hdr.indexOf('cpf');
+  const idxMat = hdr.indexOf('matricula');
+  const normCpf = String(cpf).replace(/\D/g,'').padStart(11,'0');
+
+  let rowIdx = -1;
+  for (let i = 1; i < allDados.length; i++) {
+    const cpfV = String(allDados[i][idxCPF] || '').replace(/\D/g,'').padStart(11,'0');
+    const matV = String(allDados[i][idxMat] || '').replace(/\D/g,'').padStart(11,'0');
+    if (cpfV === normCpf || matV === normCpf) { rowIdx = i + 1; break; }
+  }
+  if (rowIdx < 0) return;
+
+  Object.entries(dados).forEach(([col, val]) => {
+    const idx = hdr.indexOf(col);
+    if (idx >= 0 && val) aba.getRange(rowIdx, idx + 1).setValue(val);
+  });
+  Logger.log('[AUTH] Dados pessoais atualizados em Viajantes para CPF ' + cpf);
+}
+
 // ── Condições especiais declaradas no cadastro ───────────────
 
 /**
@@ -457,19 +496,23 @@ function _atualizarCondicoesEspeciais(cpf, opts) {
   if (opts.ehSono)      { updates['sono_disturbio'] = true; }
   if (opts.outraCondicao) { updates['outra_condicao'] = true; updates['outra_obs'] = opts.outraCondicao; }
 
-  // Upload do laudo no Drive, se fornecido
+  // Upload do laudo no Drive, se fornecido — renomeia com CPF do colaborador
   if (opts.laudoPCDBase64 && opts.laudoPCDNome) {
     try {
       const pastaId  = cfg.PASTA_LAUDOS_ID;
       const pasta    = pastaId ? DriveApp.getFolderById(pastaId) : DriveApp.getRootFolder();
       const bytes    = Utilities.base64Decode(opts.laudoPCDBase64);
-      const blob     = Utilities.newBlob(bytes, 'application/pdf', opts.laudoPCDNome);
+      const tipo     = opts.ehPCD ? 'PCD' : opts.ehSono ? 'SONO' : 'OUTRA';
+      const ext      = (opts.laudoPCDNome || '').split('.').pop() || 'pdf';
+      const nomeArquivo = `Laudo_${tipo}_${normCpf}.${ext}`;
+      const blob     = Utilities.newBlob(bytes, 'application/pdf', nomeArquivo);
       const arquivo  = pasta.createFile(blob);
       arquivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
       const link     = arquivo.getUrl();
       if (opts.ehPCD)  updates['mobilidade_laudo_link'] = link;
       if (opts.ehSono) updates['sono_laudo_link']       = link;
       if (opts.outraCondicao) updates['outra_laudo_link'] = link;
+      Logger.log('[AUTH] Laudo salvo como: ' + nomeArquivo);
     } catch(err) {
       Logger.log('[AUTH] Erro ao salvar laudo PCD: ' + err.message);
     }
@@ -486,9 +529,8 @@ function _atualizarCondicoesEspeciais(cpf, opts) {
 // ── Perfil completo (BQ + Usuarios) ─────────────────────────
 
 /**
- * Retorna o perfil completo do colaborador mesclando BQ/Viajantes (centro_custo,
- * cod_centro_custo, cargo, filial etc.) com Usuarios (data_nascimento, telefone, rg).
- * Utilizado para preencher o cabeçalho da solicitação.
+ * Retorna o perfil completo do colaborador da aba Viajantes.
+ * Dados pessoais (telefone, rg, data_nascimento) já estão em Viajantes desde o cadastro.
  * @param {string} cpf
  * @returns {Object}
  */
@@ -498,15 +540,6 @@ function carregarPerfilUsuario(cpf) {
 
   const viajante = buscarViajante(cpfLimpo);
   if (!viajante) throw new Error('Colaborador não encontrado.');
-
-  // Complementa com dados da aba Usuarios (cadastro)
-  const sheetUsuarios = _getSheetUsuarios();
-  const usuario = _buscarUsuarioPorCPF(sheetUsuarios, cpfLimpo);
-  if (usuario) {
-    viajante.data_nascimento = usuario.data_nascimento || viajante.data_nascimento || '';
-    viajante.telefone        = usuario.telefone        || viajante.telefone        || '';
-    viajante.rg              = usuario.rg              || viajante.rg              || '';
-  }
 
   return viajante;
 }
