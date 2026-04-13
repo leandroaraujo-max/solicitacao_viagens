@@ -27,6 +27,28 @@
 
 <main class="container">
 
+  <!-- ── Navegação por abas ─────────────────────────────── -->
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="trocarAba('solicitacao')" id="tabSolicitacao">📝 Nova Solicitação</button>
+    <button class="nav-tab" onclick="trocarAba('historico')" id="tabHistorico">📋 Minhas Solicitações</button>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- ABA: HISTÓRICO DE SOLICITAÇÕES                        -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <div id="painelHistorico" class="hidden">
+    <div id="listaHistorico">
+      <div class="empty-state">
+        <h3>Carregando...</h3>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- ABA: NOVA SOLICITAÇÃO (conteúdo existente)            -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <div id="painelSolicitacao">
+
   <!-- Passo 1: Identificação -->
   <div id="step-identificacao" class="card">
     <h2 class="card-title">Identificação do Solicitante</h2>
@@ -372,6 +394,8 @@
     </div>
   </div>
 
+  </div><!-- /painelSolicitacao -->
+
 </main>
 
 <script>
@@ -599,6 +623,132 @@ function voltarParaIdentificacao() {
 }
 
 function novaSolicitacao() { location.reload(); }
+
+// ── Abas: Nova Solicitação / Minhas Solicitações ──────────────
+function trocarAba(aba) {
+  const painelSol = document.getElementById('painelSolicitacao');
+  const painelHist = document.getElementById('painelHistorico');
+  const tabSol = document.getElementById('tabSolicitacao');
+  const tabHist = document.getElementById('tabHistorico');
+
+  if (aba === 'historico') {
+    painelSol.classList.add('hidden');
+    painelHist.classList.remove('hidden');
+    tabSol.classList.remove('active');
+    tabHist.classList.add('active');
+    carregarHistorico();
+  } else {
+    painelHist.classList.add('hidden');
+    painelSol.classList.remove('hidden');
+    tabHist.classList.remove('active');
+    tabSol.classList.add('active');
+  }
+}
+
+function carregarHistorico() {
+  const container = document.getElementById('listaHistorico');
+  container.innerHTML = '<p style="text-align:center;padding:2rem;color:#666;">Carregando solicitações...</p>';
+  runServer(
+    { acao: 'listarSolicitacoes', cpf: SESSION_CPF },
+    r => {
+      if (!r || !r.length) {
+        container.innerHTML = '<div class="empty-state">Nenhuma solicitação encontrada.</div>';
+        return;
+      }
+      renderizarHistorico(r);
+    }
+  );
+}
+
+function _mapearTimeline(status) {
+  const etapas = [
+    { label: 'Submetida' },
+    { label: 'Liderança' },
+    { label: 'Setor' },
+    { label: 'Cotação' },
+    { label: 'Aprovação Final' },
+    { label: 'Concluída' }
+  ];
+  const s = (status || '').toLowerCase();
+  let ativo = 0;
+  let falhou = false;
+
+  if (s.includes('reprovad')) {
+    falhou = true;
+    if (s.includes('lideran'))      ativo = 1;
+    else if (s.includes('setor'))   ativo = 2;
+    else if (s.includes('aprov'))   ativo = 4;
+    else                            ativo = 1;
+  } else if (s.includes('cancelad')) {
+    falhou = true; ativo = 0;
+  } else if (s.includes('conclu') || s === 'aprovada') {
+    ativo = 6;
+  } else if (s.includes('aprovação setor') || s.includes('cotação parcial')) {
+    ativo = 4;
+  } else if (s.includes('cotação') || s.includes('aguardando cotação')) {
+    ativo = 3;
+  } else if (s.includes('setor') || s.includes('pré-aprovação')) {
+    ativo = 2;
+  } else if (s.includes('lideran')) {
+    ativo = 1;
+  }
+
+  return etapas.map((e, i) => {
+    let estado = 'pending';
+    if (falhou && i === ativo)          estado = 'fail';
+    else if (falhou && i < ativo)       estado = 'done';
+    else if (!falhou && i < ativo)      estado = 'done';
+    else if (!falhou && i === ativo)    estado = 'active';
+    return { ...e, estado };
+  });
+}
+
+function _badgeStatus(status) {
+  const s = (status || '').toLowerCase();
+  let cls = 'pendente';
+  if (s.includes('aprovad') && !s.includes('reprovad') && !s.includes('pré'))  cls = 'aprovado';
+  if (s.includes('conclu'))   cls = 'concluido';
+  if (s.includes('reprovad')) cls = 'reprovado';
+  if (s.includes('cotação') || s.includes('cotacao'))  cls = 'cotacao';
+  return '<span class="status-badge ' + cls + '">' + status + '</span>';
+}
+
+function renderizarHistorico(lista) {
+  const container = document.getElementById('listaHistorico');
+  let html = '';
+  lista.forEach(sol => {
+    const tl = _mapearTimeline(sol.status);
+    const dots = { done: '&#10003;', active: '&#9203;', fail: '&#10007;', pending: '&#9675;' };
+    let tlHtml = '<div class="timeline">';
+    tl.forEach(step => {
+      tlHtml += '<div class="tl-step ' + step.estado + '">'
+             +  '  <div class="tl-dot">' + dots[step.estado] + '</div>'
+             +  '  <div class="tl-label">' + step.label + '</div>'
+             +  '</div>';
+    });
+    tlHtml += '</div>';
+
+    const destino = sol.destino_cidade ? (sol.destino_cidade + (sol.destino_estado ? '/' + sol.destino_estado : '')) : '—';
+    const origem = sol.origem_cidade ? (sol.origem_cidade + (sol.origem_estado ? '/' + sol.origem_estado : '')) : '—';
+    const datas = (sol.data_ida || '—') + ' a ' + (sol.data_volta || '—');
+    const servicos = sol.tipo_servico || '—';
+    const criado = sol.criado_em ? new Date(sol.criado_em).toLocaleDateString('pt-BR') : '—';
+
+    html += '<div class="req-card">'
+         +  '  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;">'
+         +  '    <strong>' + sol.req_id + '</strong>'
+         +  '    ' + _badgeStatus(sol.status)
+         +  '  </div>'
+         +  '  <div style="margin:0.75rem 0;color:#555;font-size:0.9rem;">'
+         +  '    <div>' + origem + ' &rarr; ' + destino + '</div>'
+         +  '    <div>' + datas + ' &middot; ' + servicos + '</div>'
+         +  '    <div style="font-size:0.8rem;color:#888;">Criado em ' + criado + '</div>'
+         +  '  </div>'
+         +  tlHtml
+         +  '</div>';
+  });
+  container.innerHTML = html;
+}
 
 // ── Busca de colaboradores ────────────────────────────────────
 function buscarOperador() {

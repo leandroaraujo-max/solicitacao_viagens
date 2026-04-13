@@ -141,6 +141,7 @@ function doPost_proxy(payload) {
     loginUsuario:          () => loginUsuario(payload.email, payload.senha),
     alterarSenha:          () => alterarSenha(payload.token, payload.novaSenha, payload.confirmacao),
     carregarPerfilUsuario: () => carregarPerfilUsuario(payload.cpf),
+    listarSolicitacoes:   () => listarSolicitacoes(payload.cpf),
     validarSessao:         () => validarSessao(payload.token),
     logoutUsuario:         () => { logoutUsuario(payload.token); return { ok: true }; },
     redefinirSenha:        () => redefinirSenha(payload.email),

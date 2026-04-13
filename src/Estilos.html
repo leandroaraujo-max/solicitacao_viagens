@@ -346,4 +346,49 @@ input[readonly] { background: #f5f5f5; color: #888; cursor: default; }
 
 /* ── Field hint ──────────────────────────────────────────── */
 .field-hint { font-size: 12px; color: #888; display: block; margin-top: 4px; }
+
+/* ── Tabs de navegação ───────────────────────────────────── */
+.nav-tabs { display: flex; gap: 0; margin-bottom: 24px; border-bottom: 2px solid #e0e0e0; }
+.nav-tab { padding: 12px 24px; font-size: 14px; font-weight: 600; color: #666; cursor: pointer; border: none; background: none; border-bottom: 3px solid transparent; transition: all 0.2s; }
+.nav-tab:hover { color: #0086FF; }
+.nav-tab.active { color: #0086FF; border-bottom-color: #0086FF; }
+
+/* ── Cards de solicitação (histórico) ────────────────────── */
+.req-card { background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+.req-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
+.req-card-id { font-weight: 700; color: #0086FF; font-size: 15px; }
+.req-card-destino { font-size: 14px; color: #333; }
+.req-card-datas { font-size: 12px; color: #888; }
+.req-card-servicos { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
+.req-card-servicos span { background: #e3f2fd; color: #1565c0; font-size: 11px; padding: 3px 8px; border-radius: 12px; font-weight: 600; }
+
+/* ── Badge de status ─────────────────────────────────────── */
+.status-badge { font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 12px; white-space: nowrap; }
+.status-badge.pendente { background: #fff3e0; color: #e65100; }
+.status-badge.aprovado { background: #e8f5e9; color: #2e7d32; }
+.status-badge.reprovado { background: #ffebee; color: #c62828; }
+.status-badge.concluido { background: #e3f2fd; color: #1565c0; }
+.status-badge.cotacao { background: #f3e5f5; color: #7b1fa2; }
+
+/* ── Timeline visual ─────────────────────────────────────── */
+.timeline { display: flex; align-items: flex-start; gap: 0; margin-top: 16px; overflow-x: auto; padding-bottom: 4px; }
+.tl-step { display: flex; flex-direction: column; align-items: center; flex: 1; min-width: 80px; position: relative; }
+.tl-step::before { content: ''; position: absolute; top: 14px; left: -50%; right: 50%; height: 3px; background: #e0e0e0; z-index: 0; }
+.tl-step:first-child::before { display: none; }
+.tl-step.done::before { background: #2e7d32; }
+.tl-step.active::before { background: #0086FF; }
+.tl-dot { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; z-index: 1; border: 2px solid #e0e0e0; background: #fff; color: #bbb; }
+.tl-step.done .tl-dot { background: #2e7d32; color: #fff; border-color: #2e7d32; }
+.tl-step.active .tl-dot { background: #0086FF; color: #fff; border-color: #0086FF; animation: pulse 1.5s infinite; }
+.tl-step.fail .tl-dot { background: #c62828; color: #fff; border-color: #c62828; }
+.tl-label { font-size: 10px; color: #888; margin-top: 6px; text-align: center; line-height: 1.2; }
+.tl-step.done .tl-label { color: #2e7d32; font-weight: 600; }
+.tl-step.active .tl-label { color: #0086FF; font-weight: 600; }
+.tl-step.fail .tl-label { color: #c62828; font-weight: 600; }
+.tl-date { font-size: 9px; color: #aaa; margin-top: 2px; }
+@keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(0,134,255,0.3); } 50% { box-shadow: 0 0 0 8px rgba(0,134,255,0); } }
+
+/* ── Empty state ─────────────────────────────────────────── */
+.empty-state { text-align: center; padding: 60px 20px; color: #999; }
+.empty-state h3 { color: #666; margin-bottom: 8px; }
 </style>

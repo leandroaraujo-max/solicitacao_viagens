@@ -409,6 +409,53 @@ function atualizarStatusSolicitacao(reqID, novoStatus) {
   }
 }
 
+/**
+ * Lista todas as solicitações do viajante por CPF.
+ * Retorna array de objetos com campos resumidos para exibição no histórico.
+ */
+function listarSolicitacoes(cpf) {
+  const cfg   = getConfig();
+  const sheet = SpreadsheetApp.openById(cfg.SHEET_ID).getSheetByName('Solicitacoes');
+  if (!sheet) return [];
+  const dados = sheet.getDataRange().getValues();
+  const hdr   = dados[0];
+  const idxCpf = hdr.indexOf('cpf_viajante');
+  const idxMat = hdr.indexOf('matricula_viajante');
+  const normCpf = String(cpf || '').replace(/\D/g,'').padStart(11,'0');
+
+  const resultado = [];
+  for (let i = 1; i < dados.length; i++) {
+    const cpfRow = String(dados[i][idxCpf] || '').replace(/\D/g,'').padStart(11,'0');
+    const matRow = String(dados[i][idxMat] || '').replace(/\D/g,'').padStart(11,'0');
+    if (cpfRow !== normCpf && matRow !== normCpf) continue;
+
+    const obj = linhaParaObjeto(hdr, dados[i]);
+    resultado.push({
+      req_id:              obj.req_id,
+      status:              obj.status,
+      destino_cidade:      obj.destino_cidade,
+      destino_estado:      obj.destino_estado,
+      origem_cidade:       obj.origem_cidade,
+      origem_estado:       obj.origem_estado,
+      data_ida:            obj.data_ida,
+      data_volta:          obj.data_volta,
+      tipo_servico:        obj.tipo_servico,
+      classificacao_aereo: obj.classificacao_aereo,
+      criado_em:           obj.criado_em,
+      atualizado_em:       obj.atualizado_em,
+      motivo_viagem:       obj.motivo_viagem,
+      aprovador_n1_nome:   obj.aprovador_n1_nome,
+      aprovador_n1_acao:   obj.aprovador_n1_acao,
+      aprovador_n1_em:     obj.aprovador_n1_em,
+      agencia_vencedora:   obj.agencia_vencedora,
+      quarto_excecao_saude:obj.quarto_excecao_saude,
+    });
+  }
+  // Mais recentes primeiro
+  resultado.sort((a, b) => new Date(b.criado_em || 0) - new Date(a.criado_em || 0));
+  return resultado;
+}
+
 function getRequisicao(reqID) {
   const cfg   = getConfig();
   const sheet = SpreadsheetApp.openById(cfg.SHEET_ID).getSheetByName('Solicitacoes');
