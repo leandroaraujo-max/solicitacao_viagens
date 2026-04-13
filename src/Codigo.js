@@ -100,6 +100,8 @@ function doPost(e) {
     _debug_lerAba:            () => _debugLerAba(payload.aba, payload.maxRows),
     _debug_cabecalho:         () => _debugCabecalho(payload.aba),
     _debug_buscarLinha:       () => _debugBuscarLinha(payload.aba, payload.coluna, payload.valor),
+    _debug_deletarLinha:      () => _debugDeletarLinha(payload.aba, payload.coluna, payload.valor),
+    _debug_migrarViajantes:   () => { TESTE_migrarViajantesHeader(); return { ok: true }; },
   };
 
   try {
@@ -241,6 +243,24 @@ function _debugBuscarLinha(abaName, coluna, valor) {
     String(r[coluna] ?? '').toLowerCase().includes(String(valor).toLowerCase())
   );
   return { headers, rows: encontrados, total: encontrados.length };
+}
+
+function _debugDeletarLinha(abaName, coluna, valor) {
+  const cfg = getConfig();
+  const sheet = SpreadsheetApp.openById(cfg.SHEET_ID).getSheetByName(abaName);
+  if (!sheet) throw new Error('Aba "' + abaName + '" não encontrada.');
+  const data = sheet.getDataRange().getValues();
+  const hdr = data[0];
+  const idx = hdr.indexOf(coluna);
+  if (idx < 0) throw new Error('Coluna "' + coluna + '" não encontrada.');
+  let deletadas = 0;
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (String(data[i][idx] || '').toLowerCase().includes(String(valor).toLowerCase())) {
+      sheet.deleteRow(i + 1);
+      deletadas++;
+    }
+  }
+  return { aba: abaName, coluna, valor, deletadas };
 }
 
 /**
@@ -581,6 +601,43 @@ function migrarSolicitacoesParaV2(ss, hdrV2) {
 function TESTE_setMcpApiKey() {
   PropertiesService.getScriptProperties().setProperty('MCP_API_KEY', 'k2/d+8hjkJleiAlMFs8qrwjUbhtIRuB9');
   Logger.log('MCP_API_KEY configurada com sucesso.');
+}
+
+/**
+ * Migração: insere colunas telefone, rg, data_nascimento na aba Viajantes
+ * na posição 16-18 (após aprovador_n2_nome), deslocando dados existentes.
+ * Execute UMA VEZ no editor GAS → selecionar TESTE_migrarViajantesHeader → Executar
+ */
+function TESTE_migrarViajantesHeader() {
+  const cfg = getConfig();
+  const ss  = SpreadsheetApp.openById(cfg.SHEET_ID);
+  const aba = ss.getSheetByName('Viajantes');
+  if (!aba) { Logger.log('Aba Viajantes não encontrada.'); return; }
+
+  const hdr = aba.getRange(1, 1, 1, aba.getLastColumn()).getValues()[0];
+  if (hdr.indexOf('telefone') >= 0) {
+    Logger.log('Colunas telefone/rg/data_nascimento já existem. Nada a fazer.');
+    return;
+  }
+
+  // Insere 3 colunas ANTES da posição 16 (após aprovador_n2_nome, col 15)
+  aba.insertColumnsAfter(15, 3);
+
+  // Nomeia as novas colunas
+  aba.getRange(1, 16).setValue('telefone');
+  aba.getRange(1, 17).setValue('rg');
+  aba.getRange(1, 18).setValue('data_nascimento');
+
+  // Limpa colunas vazias no final (lixo)
+  const lastCol = aba.getLastColumn();
+  const hdrFull = aba.getRange(1, 1, 1, lastCol).getValues()[0];
+  for (let c = lastCol; c > 0; c--) {
+    if (!hdrFull[c - 1]) aba.deleteColumn(c);
+    else break;
+  }
+
+  Logger.log('Migração concluída. Header atualizado com telefone/rg/data_nascimento.');
+  Logger.log('Novo header: ' + aba.getRange(1, 1, 1, aba.getLastColumn()).getValues()[0].join(', '));
 }
 
 function TESTE_diagnosticoEmailSetor() {

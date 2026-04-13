@@ -194,6 +194,16 @@ function criarOuAtualizarViajante(dadosBQ) {
       'motivo_categoria_hosp','motivo_categoria_veic','atualizado_em'
     ]);
     sheet.setFrozenRows(1);
+  } else {
+    // Migração: garante que colunas telefone/rg/data_nascimento existam (inseridas no @75)
+    const hdr = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    if (hdr.indexOf('telefone') < 0) {
+      sheet.insertColumnsAfter(15, 3);
+      sheet.getRange(1, 16).setValue('telefone');
+      sheet.getRange(1, 17).setValue('rg');
+      sheet.getRange(1, 18).setValue('data_nascimento');
+      Logger.log('[BQ] Migração: colunas telefone/rg/data_nascimento inseridas em Viajantes.');
+    }
   }
 
   // Regra R1: cargo de alto nível → hospedagem individual desde o início
