@@ -2,9 +2,9 @@
 
 > **Projeto:** Automação do processo de viagens corporativas Magalu / Luizalabs  
 > **Stack:** Google Apps Script · BigQuery · Google Sheets · Google Drive · Duffel Flights API  
-> **Status:** 🟢 v3 em produção — Deploy @70  
+> **Status:** Em desenvolvimento — Deploy @86  
 > **Data de início:** 08/04/2026  
-> **Último deploy:** 11/04/2026 — @70  
+> **Último deploy:** 13/04/2026 — @86  
 
 ---
 
@@ -19,7 +19,10 @@
 - [Documentação](#documentação)
 - [Stack Técnica](#stack-técnica)
 - [Estrutura do Repositório](#estrutura-do-repositório)
-- [Próximos Passos v2](#próximos-passos-v2)
+- [MCP Server (Debugging)](#mcp-server-debugging)
+- [Deploy](#deploy)
+- [Histórico de Deploys](#histórico-de-deploys)
+- [Próximos Passos](#próximos-passos)
 
 ---
 
@@ -27,35 +30,30 @@
 
 | Componente | Status |
 |---|---|
-| Portal do Viajante (`Index.html`) | ✅ Produção |
-| Portal da Agência (`PortalAgencia.html`) | ✅ Produção |
-| Portal de Aprovação (`PortalAprovacao.html`) | ✅ Produção |
-| Fluxo Liderança → Pré-aprovação Setor → Agências | ✅ Produção |
-| Integração BigQuery (cache-aside por CPF) | ✅ Produção |
-| Casamento de solicitações | ✅ Produção |
-| Delegações | ✅ Produção |
-| Busca consultiva de voos — Duffel API (Azul/Gol/LATAM) | ✅ Produção (sandbox) |
-| Busca separada por trecho (Ida / Volta) | ✅ Produção |
-| Autocomplete de cidades/aeroportos (Duffel Places) | ✅ Produção |
-| Cálculo de distância (Geocoder + Haversine) | ✅ Produção |
-| Preferência de hospedagem (campo livre) | ✅ Produção |
-| Upload de laudos médicos no Drive | ✅ Produção |
-| Upload de vouchers | ✅ Produção |
-| SLA checker (time-based trigger) | ✅ Produção |
-| Pré-aprovação do Setor (E1) | ✅ Produção |
-| Verificação de férias do N1 (C2) | ✅ Produção |
-| Campos de origem, observações, bagagem, rodoviário, carro | ✅ Produção |
-| Login com autenticação CPF + senha (sandbox GAS) | ✅ Produção |
-| Geração de PDF da solicitação (`gerarPDFSolicitacao`) | ✅ Produção |
-| LockService (concorrência) + `logErro()` global | ✅ Produção |
-| Loader global `runServer()` no frontend | ✅ Produção |
-| Emails com HTML entities (sem emojis) + dados completos do viajante | ✅ Produção |
-| Cabine fixa economy (sem seletor) | ✅ Produção |
-| Busca IATA em campos de carro (retirada/devolução) | ✅ Produção |
-| Telefone no header + perfil do viajante | ✅ Produção |
-| Cadastro PCD/sono com normalização CPF padStart | ✅ Produção |
+| Portal do Viajante (`Index.html`) | Produção |
+| Portal da Agência (`PortalAgencia.html`) | Produção |
+| Portal de Aprovação (`PortalAprovacao.html`) | Produção |
+| Fluxo Liderança -> Pre-aprovação Setor -> Agências | Produção |
+| Integração BigQuery (cache-aside por CPF) | Produção |
+| Casamento de solicitações | Produção |
+| Delegações | Produção |
+| Busca consultiva de voos — Duffel API (Azul/Gol/LATAM) | Produção (sandbox) |
+| Busca separada por trecho (Ida / Volta) | Produção |
+| Autocomplete de cidades/aeroportos (Duffel Places) | Produção |
+| Calculo de distância (Geocoder + Haversine) | Produção |
+| Upload de laudos médicos no Drive | Produção |
+| Upload de vouchers | Produção |
+| SLA checker (time-based trigger) | Produção |
+| Login com autenticação CPF + senha | Produção |
+| Geração de PDF da solicitação | Produção |
+| LockService (concorrência) + `logErro()` global | Produção |
+| Aba "Minhas Solicitações" com timeline visual | Produção |
+| MCP Server para debugging via VS Code | Produção |
+| Perfil unificado viajante (Sheets + BQ) | Produção |
+| Condição especial PCD/sono com quarto Individual pre-aprovado | Produção |
+| Valores monetários com `setNumberFormat('#,##0.00')` | Produção |
 
-**Deploy ativo:** `AKfycbzi3Cy5rJ2pB2QH1B7p-d7HUw9xNPwF1pUrUS6lDRmznQ-Ss1X2js_YNr3wK6vBSTTh` @70  
+**Deploy ativo:** `AKfycbzi3Cy5rJ2pB2QH1B7p-d7HUw9xNPwF1pUrUS6lDRmznQ-Ss1X2js_YNr3wK6vBSTTh` @86  
 **Script ID:** `157FO7diD5kMP3FWh6tkFvPveElKHhVzJKrdPMqTvaQw-sce_wTq4jwXX`
 
 ### Histórico de Deploys
@@ -77,6 +75,12 @@
 | @67 | — | fix: HTML malformado step-identificacao, SERVICOS_VALIDOS restaurado |
 | @69 | — | fix: `soCpf()` TypeError, `condicaoEspecialPreAprovada` centralizado |
 | @70 | `56308ae` | feat: emails HTML entities + dados viajante enriquecidos, cabine economy-only, IATA carro, telefone header, CPF padStart cadastro PCD |
+| @76 | — | feat: aba "Minhas Solicitações" com timeline visual no Index.html |
+| @77 | — | fix: deploy com deployment ID correto |
+| @78 | — | fix: flush() após appendRow, categoria_hospedagem = Individual para PCD, value check fix |
+| @79-84 | — | feat: MCP Server (clasp OAuth, debug routes, migração Viajantes header) |
+| @85 | `33cb4d8` | feat: rotas carregarSolicitacaoAgencia, listarSolicitacoes, vincularSolicitacoes no doPost |
+| @86 | `9badb78` | fix: Array cotação 78->76, setNumberFormat monetários, nomear headers extras Solicitacoes |
 
 ---
 
@@ -259,12 +263,13 @@ Responsável por criar, validar e atualizar solicitações de viagem na aba `Sol
 
 | Função | Descrição |
 |---|---|
-| `submeterSolicitacao(payload)` | Orquestra a criação completa: valida o payload → gera `req_id` → calcula antecedência e classificação (Comum/Emergencial) → carrega perfil do viajante → extrai cadeia de aprovação → monta e grava a linha de 100+ colunas na Sheet → aciona o motor de casamento → dispara e-mails para as agências. |
+| `submeterSolicitacao(payload)` | Orquestra a criação completa: valida o payload -> gera `req_id` -> calcula antecedência e classificação (Comum/Emergencial) -> carrega perfil do viajante -> extrai cadeia de aprovação -> monta e grava a linha de 170 colunas na Sheet -> aciona o motor de casamento -> dispara e-mails para as agências. |
 | `validarPayloadSolicitacao(p)` | Valida campos obrigatórios, datas futuras, ordem das datas e antecedência mínima de 2 dias para hospedagem/carro. |
 | `validarCadeiaAprovacao(cadeia, matricula)` | Alerta o setor de viagens por e-mail caso o colaborador não possua gestor N1 mapeado no BQ, sem bloquear a submissão. |
 | `gerarReqID()` | Gera um ID único no formato `REQ-{ano}-{seq4digitos}`. |
-| `submeterCotacaoAgencia(payload)` | Grava a cotação recebida da agência (prefixos `cotacao_tastur_*` ou `cotacao_kontrip_*`) nas colunas corretas da linha da solicitação. Após a segunda cotação, envia o e-mail de aprovação N1. |
+| `submeterCotacaoAgencia(payload)` | Grava a cotação recebida da agência (prefixos `cotacao_tastur_*` ou `cotacao_kontrip_*`) nas colunas corretas da linha da solicitação. Valores monetários forçados via `Number()` com `setNumberFormat('#,##0.00')`. Após a segunda cotação, altera status para "Pendente Aprovação Setor" e envia e-mail ao setor. |
 | `atualizarStatusSolicitacao(reqID, novoStatus)` | Atualiza as colunas `status` e `atualizado_em` da solicitação na Sheet. |
+| `listarSolicitacoes(cpf)` | Retorna array de objetos resumidos para a aba "Minhas Solicitações" (timeline visual). |
 | `getRequisicao(reqID)` | Busca e retorna os dados completos de uma solicitação pelo `req_id`. |
 
 ---
@@ -401,39 +406,112 @@ o ciclo de questionamentos entre setor e solicitante.
 ```
 solicitacao_viagens/
 ├── README.md
+├── package.json                — Scripts npm para deploy via clasp
+├── .clasprc.json               — Config clasp (rootDir: src/)
+├── .mcp-config.json            — Config do MCP Server
+├── .github/
+│   └── copilot-instructions.md — Instruções para agentes de IA
 ├── docs/
-│   ├── 01-discovery.md
-│   ├── 02-arquitetura.md
-│   ├── 03-regras-de-negocio.md
-│   ├── 04-modulos.md
-│   ├── 05-schema-planilhas.md
-│   ├── 06-fluxo-aprovacoes.md
-│   ├── 07-casamento-solicitacoes.md
-│   ├── 08-cadastro-viajante.md
-│   ├── 09-delegacoes.md
-│   ├── 10-seguranca-lgpd.md
-│   └── 11-pendencias-decisao.md
-└── src/                        ← código-fonte GAS (a ser criado no MVP)
-    ├── Codigo.gs
-    ├── Aprovacoes.gs
-    ├── Casamento.gs
-    ├── BigQuery.gs
-    ├── Index.html
-    ├── PortalAgencia.html
-    └── appsscript.json
+│   ├── 01-discovery.md         — Mapeamento do processo AS-IS/TO-BE
+│   ├── 02-arquitetura.md       — Stack, fluxo de dados, integração BQ
+│   ├── 03-regras-de-negocio.md — Todas as regras mapeadas
+│   ├── 04-modulos.md           — Descrição de cada interface
+│   ├── 05-schema-planilhas.md  — Estrutura das abas
+│   ├── 06-fluxo-aprovacoes.md  — Cadeia N1/N2/RH
+│   ├── 07-casamento-solicitacoes.md — Motor de match
+│   ├── 08-cadastro-viajante.md — Perfil e condições especiais
+│   ├── 09-delegacoes.md        — Solicitação em nome de terceiros
+│   ├── 10-seguranca-lgpd.md    — Tokens, laudos, proteções
+│   └── 11-pendencias-decisao.md — Pontos em aberto
+├── mcp/
+│   └── server.js               — MCP Server para debugging via VS Code
+└── src/                        — Código-fonte GAS (clasp push)
+    ├── appsscript.json
+    ├── Codigo.js               — Roteador doGet/doPost + funções auxiliares + rotas debug
+    ├── Auth.js                 — Login, cadastro, perfil, condições especiais
+    ├── BigQuery.js             — Cache-aside BQ + Sheets
+    ├── Solicitacoes.js         — CRUD solicitações + cotações de agência
+    ├── Aprovacoes.js           — Fluxo aprovação N1/N2/Setor + SLA checker
+    ├── Casamento.js            — Match automático de viagens similares
+    ├── Delegacoes.js           — Validação de delegações
+    ├── Drive.js                — Upload laudos e vouchers
+    ├── Notificacoes.js         — Templates e envio de e-mails
+    ├── AmadeusAPI.js           — Integração Duffel Flights API
+    ├── Index.html              — Portal do Viajante (Nova Solicitação + Minhas Solicitações)
+    ├── PortalAgencia.html      — Portal das Agências (cotação + voucher)
+    ├── PortalAprovacao.html    — Confirmação pós-aprovação
+    ├── Login.html              — Tela de login/cadastro
+    └── Estilos.html            — CSS compartilhado (design system Magalu)
 ```
+
+---
+
+## MCP Server (Debugging)
+
+Servidor MCP local (`mcp/server.js`) para interagir com a planilha e o backend GAS diretamente do VS Code, sem precisar abrir o editor GAS.
+
+**Arquitetura:** Reutiliza o token OAuth do `~/.clasprc.json` (mesmo do clasp) com auto-refresh, eliminando a necessidade de configurar OAuth separado (bloqueado pelo admin do workspace corporativo).
+
+**Tools disponíveis:**
+
+| Tool | Descrição |
+|---|---|
+| `sheets_ler_aba` | Le todas as linhas de uma aba |
+| `sheets_cabecalho` | Retorna o header de uma aba |
+| `sheets_buscar_linha` | Busca linhas por valor em uma coluna |
+| `gas_executar` | Executa qualquer ação do doPost (inclusive rotas `_debug_*`) |
+
+**Rotas de debug** (protegidas por `MCP_API_KEY`):
+- `_debug_lerAba` / `_debug_cabecalho` / `_debug_buscarLinha` — leitura de planilha via HTTP
+- `_debug_deletarLinha` — deleta linhas por coluna/valor
+- `_debug_migrarViajantes` / `_debug_migrarSolicitacoesHeader` — migrações de schema
+
+**Configuração:** `.mcp-config.json` com `SHEET_ID`, `WEBAPP_URL`, `DEPLOYMENT_ID`, `SCRIPT_ID`, `MCP_API_KEY`, `BQ_PROJECT_ID`.
+
+---
+
+## Deploy
+
+```bash
+# SEMPRE usar o deployment ID fixo:
+npx clasp push
+npx clasp deploy -i "AKfycbzi3Cy5rJ2pB2QH1B7p-d7HUw9xNPwF1pUrUS6lDRmznQ-Ss1X2js_YNr3wK6vBSTTh" -d "vNN - descrição"
+```
+
+**NUNCA** usar `clasp deploy` sem `-i` — cria deployment novo com URL diferente!
+
+**Convenção de versão:** `vNN` no commit e no deploy (ex: v86, v87). O número do deploy = número da versão.
 
 ---
 
 ## Próximos Passos
 
-Itens pendentes identificados para versões futuras:
-
 - [ ] Dashboard Looker Studio com custos e SLAs
 - [ ] Integração com sistema de créditos / reembolso
-- [ ] Testes automatizados das funções críticas (GAS + Jasmine ou similar)
+- [ ] Testes automatizados das funções críticas
 - [ ] Passagem para ambiente Duffel produção (`duffel_live_...`) após homologação
 - [ ] Notificação ao RH para exceção de quarto individual (D15 — desabilitado no MVP)
+- [ ] Amadeus GDS como alternativa ao Duffel (se necessário)
+- [ ] Relatórios de economia por casamento de solicitações
+
+---
+
+## Planilhas — Schema Resumido
+
+### Solicitacoes (170 colunas)
+
+| Faixa | Colunas | Descrição |
+|---|---|---|
+| 1-84 | `req_id` ... `agencia_vencedora` | Campos da solicitação, exceções, aprovações |
+| 85-122 | `cotacao_tastur_*` | 38 colunas: aero(12) + hotel(10) + carro(7) + rodov(7) + obs + enviado_em |
+| 123-160 | `cotacao_kontrip_*` | 38 colunas (mesmo layout) |
+| 161-165 | `voucher_*` + `concluido_em` | Voucher aereo/hotel/carro links + timestamps |
+| 166-167 | (reserva) | Colunas reserva para uso futuro |
+| 168-170 | `assento_especial`, `motivo_assento_especial`, `cod_centro_custo` | Campos extras |
+
+### Viajantes (21 colunas)
+
+`cpf`, `matricula`, `nome`, `email`, `cargo`, `diretoria`, `area`, `gestor_direto`, `aprovador_n2_nome`, `status`, `criado_em`, `atualizado_em`, `categoria_hospedagem`, `categoria_veiculo`, `motivo_categoria_hosp`, `telefone`, `rg`, `data_nascimento`, `cod_centro_custo`, `condicao_especial_descricao`, `condicao_especial_documento_link`
 
 ---
 
@@ -456,3 +534,4 @@ Itens pendentes identificados para versões futuras:
 | `SLA_COTACAO_H` | SLA em horas para cotação das agências (default: 24) |
 | `SLA_N1_COMUM_H` | SLA em horas para aprovação N1 comum (default: 24) |
 | `SLA_N1_EMERG_H` | SLA em horas para aprovação N1 emergencial (default: 4) |
+| `MCP_API_KEY` | Chave de autenticação para rotas `_debug_*` do MCP Server |
