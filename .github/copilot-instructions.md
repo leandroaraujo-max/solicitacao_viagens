@@ -28,6 +28,7 @@
 | `Index.html` | Frontend principal (tabs: Nova Solicitação, Minhas Solicitações) |
 | `PortalAgencia.html` | Frontend das agências (Tastur/Kontrip) |
 | `PortalAprovacao.html` | Frontend de aprovação para gestores |
+| `PortalSetor.html` | Portal do setor de viagens (gestão, indicadores, aprovações inline) |
 
 ## Deploy — REGRA CRÍTICA
 ```bash
@@ -64,8 +65,8 @@ npx clasp deploy -i "AKfycbzi3Cy5rJ2pB2QH1B7p-d7HUw9xNPwF1pUrUS6lDRmznQ-Ss1X2js_
 
 ## Convenções de Commit
 - Mensagem: `vNN: descrição curta das mudanças`
-- Deploy number = versão do commit (ex: v86, v87, etc.)
-- Próximo deploy: **@87**
+- Deploy number = versão do commit (ex: v87, v88, etc.)
+- Próximo deploy: **@90**
 
 ## Regras de Negócio (resumo)
 - Fluxo: Solicitação → Cotação (2 agências) → Aprovação Setor → Aprovação N1 → N2 (se >R$5k) → Voucher → Conclusão
