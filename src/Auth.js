@@ -130,10 +130,17 @@ function loginUsuario(email, senha) {
 
   const trocarSenha = (usuario.senha_temporaria === true || String(usuario.senha_temporaria).toLowerCase() === 'true');
 
+  // Detecta se o usuário é membro do setor de viagens
+  const emailsSetor = (PropertiesService.getScriptProperties().getProperty('EMAILS_SETOR') || '')
+    .split(',')
+    .map(function(e) { return e.trim().toLowerCase(); })
+    .filter(Boolean);
+  const perfil = emailsSetor.includes(emailLimpo) ? 'setor' : 'viajante';
+
   const token = Utilities.getUuid();
   CacheService.getScriptCache().put(
     'sess_' + token,
-    JSON.stringify({ cpf: _normCpf(usuario.cpf), email: emailLimpo, nome: usuario.nome || '', telefone: usuario.telefone || '', trocarSenha: trocarSenha }),
+    JSON.stringify({ cpf: _normCpf(usuario.cpf), email: emailLimpo, nome: usuario.nome || '', telefone: usuario.telefone || '', trocarSenha: trocarSenha, perfil: perfil }),
     8 * 60 * 60  // 8 horas
   );
 

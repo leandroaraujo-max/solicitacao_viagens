@@ -476,3 +476,109 @@ function getRequisicao(reqID) {
   }
   return null;
 }
+
+/**
+ * Lista todas as solicitações para o Portal do Setor de Viagens.
+ * Suporta filtros opcionais: status, periodo (dias), agencia, cpf.
+ * Retorna campos completos necessários para gestão e indicadores.
+ */
+function listarTodasSolicitacoes(filtros) {
+  const cfg   = getConfig();
+  const sheet = SpreadsheetApp.openById(cfg.SHEET_ID).getSheetByName('Solicitacoes');
+  if (!sheet) return [];
+  const dados = sheet.getDataRange().getValues();
+  const hdr   = dados[0];
+
+  const agora = new Date();
+  const periodoDias = filtros && filtros.periodo ? parseInt(filtros.periodo) : 0;
+  const filtroStatus   = filtros && filtros.status   ? String(filtros.status).toLowerCase()   : '';
+  const filtroAgencia  = filtros && filtros.agencia  ? String(filtros.agencia).toLowerCase()  : '';
+  const filtroCpf      = filtros && filtros.cpf      ? String(filtros.cpf).replace(/\D/g,'').padStart(11,'0') : '';
+
+  const resultado = [];
+  for (let i = 1; i < dados.length; i++) {
+    const obj = linhaParaObjeto(hdr, dados[i]);
+    if (!obj.req_id) continue;
+
+    // Filtro por período
+    if (periodoDias > 0) {
+      const criado = new Date(obj.criado_em || 0);
+      const diffDias = (agora - criado) / (1000 * 60 * 60 * 24);
+      if (diffDias > periodoDias) continue;
+    }
+    // Filtro por status
+    if (filtroStatus && String(obj.status || '').toLowerCase() !== filtroStatus) continue;
+    // Filtro por agência
+    if (filtroAgencia && String(obj.agencia_vencedora || '').toLowerCase() !== filtroAgencia) continue;
+    // Filtro por CPF viajante
+    if (filtroCpf) {
+      const cpfRow = String(obj.cpf_viajante || '').replace(/\D/g,'').padStart(11,'0');
+      if (cpfRow !== filtroCpf) continue;
+    }
+
+    resultado.push({
+      req_id:               obj.req_id,
+      status:               obj.status,
+      nome_viajante:        obj.nome_viajante,
+      cpf_viajante:         obj.cpf_viajante,
+      matricula_viajante:   obj.matricula_viajante,
+      email:                obj.email,
+      tipo_servico:         obj.tipo_servico,
+      origem_cidade:        obj.origem_cidade,
+      origem_estado:        obj.origem_estado,
+      destino_cidade:       obj.destino_cidade,
+      destino_estado:       obj.destino_estado,
+      data_ida:             obj.data_ida,
+      data_volta:           obj.data_volta,
+      criado_em:            obj.criado_em,
+      atualizado_em:        obj.atualizado_em,
+      classificacao_aereo:  obj.classificacao_aereo,
+      motivo_viagem:        obj.motivo_viagem,
+      quarto_tipo_solicitado: obj.quarto_tipo_solicitado,
+      aprovador_n1_nome:    obj.aprovador_n1_nome,
+      aprovador_n1_email:   obj.aprovador_n1_email,
+      aprovador_n1_acao:    obj.aprovador_n1_acao,
+      aprovador_n1_em:      obj.aprovador_n1_em,
+      agencia_vencedora:    obj.agencia_vencedora,
+      quarto_excecao_saude: obj.quarto_excecao_saude,
+      excecao_status_rh:    obj.excecao_status_rh,
+      pre_aprovacao_email:  obj.pre_aprovacao_email,
+      // Cotações — valores resumidos para tabela comparativa
+      cotacao_tastur_aero_valor:   obj.cotacao_tastur_aero_valor,
+      cotacao_tastur_hotel_total:  obj.cotacao_tastur_hotel_total,
+      cotacao_tastur_carro_valor:  obj.cotacao_tastur_carro_valor,
+      cotacao_tastur_enviado_em:   obj.cotacao_tastur_enviado_em,
+      cotacao_kontrip_aero_valor:  obj.cotacao_kontrip_aero_valor,
+      cotacao_kontrip_hotel_total: obj.cotacao_kontrip_hotel_total,
+      cotacao_kontrip_carro_valor: obj.cotacao_kontrip_carro_valor,
+      cotacao_kontrip_enviado_em:  obj.cotacao_kontrip_enviado_em,
+      // Vouchers
+      voucher_aereo_link:  obj.voucher_aereo_link,
+      voucher_hotel_link:  obj.voucher_hotel_link,
+      voucher_carro_link:  obj.voucher_carro_link,
+      concluido_em:        obj.concluido_em,
+    });
+  }
+  resultado.sort(function(a, b) { return new Date(b.criado_em || 0) - new Date(a.criado_em || 0); });
+  return resultado;
+}
+
+/**
+ * Reenvia e-mail para as agências (Tastur e Kontrip) para uma solicitação
+ * que está em status "Aguardando Cotação".
+ */
+function reenviarEmailAgencias(reqID) {
+  const req = getRequisicao(reqID);
+  if (!req) throw new Error('Solicitação ' + reqID + ' não encontrada.');
+  if (req.status !== 'Aguardando Cotação' && req.status !== 'Cotação Parcial') {
+    throw new Error('Reenvio só é permitido para solicitações em "Aguardando Cotação" ou "Cotação Parcial".');
+  }
+  const vi = {
+    nome: req.nome_viajante,
+    cpf:  req.cpf_viajante || req.matricula_viajante || '',
+    categoria_hospedagem: req.quarto_tipo_solicitado,
+    motivo_categoria_hosp: '',
+  };
+  dispararEmailAgencias(reqID, vi, req, req.classificacao_aereo);
+  return { ok: true, reqID: reqID };
+}

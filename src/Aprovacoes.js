@@ -406,6 +406,37 @@ function aprovarExcecaoRH(payload) {
   return { aprovado: false, motivo: 'Fluxo RH não habilitado no MVP.' };
 }
 
+/**
+ * Executa uma ação de aprovação/reprovação diretamente pelo Portal do Setor,
+ * sem necessidade de token de e-mail. Reaplica a mesma lógica de executarDecisaoAprovacao.
+ *
+ * Decisões aceitas pelo setor via portal:
+ *   PreAprovaViagem   → libera para agências cotarem
+ *   PreReprovaViagem  → reprova antes das agências
+ *   AprovaTastur      → conclui com Tastur
+ *   AprovaKontrip     → conclui com Kontrip
+ *   Reprova           → reprova após cotação
+ *
+ * @param {string} reqID
+ * @param {string} decisao
+ * @param {string} emailSetor — e-mail do membro do setor logado
+ */
+function executarAcaoSetorPortal(reqID, decisao, emailSetor) {
+  if (!reqID)    throw new Error('reqID é obrigatório.');
+  if (!decisao)  throw new Error('decisao é obrigatória.');
+  if (!emailSetor) throw new Error('emailSetor é obrigatório.');
+
+  const decisoesPermitidas = ['PreAprovaViagem','PreReprovaViagem','AprovaTastur','AprovaKontrip','Reprova'];
+  if (!decisoesPermitidas.includes(decisao)) {
+    throw new Error('Decisão não permitida para o portal do setor: ' + decisao);
+  }
+
+  // Reutiliza a mesma lógica de executarDecisaoAprovacao — token = null (ação via portal)
+  executarDecisaoAprovacao(reqID, emailSetor, decisao, 'portal-setor');
+  Logger.log('[PORTAL SETOR] ' + decisao + ' executado por ' + emailSetor + ' para ' + reqID);
+  return { ok: true, reqID: reqID, decisao: decisao };
+}
+
 function paginaErroHtml(mensagem) {
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
     <style>body{font-family:sans-serif;text-align:center;padding:60px;color:#333}

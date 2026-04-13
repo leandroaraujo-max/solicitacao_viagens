@@ -59,6 +59,20 @@ function doGet(e) {
         .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
     }
 
+    // Membro do setor: redireciona para PortalSetor, exceto se solicitou modo viajante
+    if (sessao.perfil === 'setor' && params.modo !== 'viajante') {
+      const tmpl = HtmlService.createTemplateFromFile('PortalSetor');
+      tmpl.sessionCpf      = sessao.cpf   || '';
+      tmpl.sessionNome     = sessao.nome  || '';
+      tmpl.sessionEmail    = sessao.email || '';
+      tmpl.sessionToken    = params.sessionToken || '';
+      tmpl.sessionTelefone = sessao.telefone || '';
+      tmpl.webAppUrl       = getConfig().WEBAPP_URL || '';
+      return tmpl.evaluate()
+        .setTitle('Portal Setor de Viagens — Magalu')
+        .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+    }
+
     const tmpl = HtmlService.createTemplateFromFile('Index');
     tmpl.sessionCpf   = sessao.cpf   || '';
     tmpl.sessionNome  = sessao.nome  || '';
@@ -100,6 +114,11 @@ function doPost(e) {
     calcularDistancia:        () => calcularDistanciaKm(payload.origem, payload.destino),
     listarSolicitacoes:       () => listarSolicitacoes(payload.cpf),
     vincularSolicitacoes:     () => vincularSolicitacoes(payload.reqID1, payload.reqID2, payload.operadorEmail),
+    // Setor de viagens
+    listarTodasSolicitacoes:  () => listarTodasSolicitacoes(payload.filtros || {}),
+    executarAcaoSetor:        () => executarAcaoSetorPortal(payload.reqID, payload.decisao, payload.emailSetor),
+    getRequisicao:            () => getRequisicao(payload.reqID),
+    reenviarEmailAgencias:    () => reenviarEmailAgencias(payload.reqID),
     // ── Depuração MCP (leitura de planilha via HTTP) ─────────
     _debug_lerAba:            () => _debugLerAba(payload.aba, payload.maxRows),
     _debug_cabecalho:         () => _debugCabecalho(payload.aba),
@@ -107,6 +126,20 @@ function doPost(e) {
     _debug_deletarLinha:      () => _debugDeletarLinha(payload.aba, payload.coluna, payload.valor),
     _debug_migrarViajantes:   () => { TESTE_migrarViajantesHeader(); return { ok: true }; },
     _debug_migrarSolicitacoesHeader: () => { _migrarSolicitacoesHeader(); return { ok: true }; },
+    _debug_setProperty: () => {
+      // Permite configurar Script Properties via MCP (protegido por API key)
+      PropertiesService.getScriptProperties().setProperty(payload.chave, payload.valor);
+      return { ok: true, chave: payload.chave };
+    },
+    _debug_getProperty: () => {
+      const val = PropertiesService.getScriptProperties().getProperty(payload.chave);
+      return { chave: payload.chave, valor: val };
+    },
+    _debug_executarDecisao: () => {
+      // Simula processamento de token de aprovação sem validar expiração — apenas para testes MCP
+      executarDecisaoAprovacao(payload.reqID, payload.email, payload.decisao, 'debug-mcp');
+      return { ok: true, reqID: payload.reqID, decisao: payload.decisao };
+    },
   };
 
   try {
@@ -163,6 +196,11 @@ function doPost_proxy(payload) {
     validarSessao:         () => validarSessao(payload.token),
     logoutUsuario:         () => { logoutUsuario(payload.token); return { ok: true }; },
     redefinirSenha:        () => redefinirSenha(payload.email),
+    // Setor de viagens
+    listarTodasSolicitacoes: () => listarTodasSolicitacoes(payload.filtros || {}),
+    executarAcaoSetor:       () => executarAcaoSetorPortal(payload.reqID, payload.decisao, payload.emailSetor),
+    getRequisicao:           () => getRequisicao(payload.reqID),
+    reenviarEmailAgencias:   () => reenviarEmailAgencias(payload.reqID),
   };
 
   try {
