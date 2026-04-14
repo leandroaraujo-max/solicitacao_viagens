@@ -59,7 +59,7 @@ Crie o arquivo `.mcp-config.json` na raiz do repositório (ao lado do `package.j
 ```json
 {
   "WEBAPP_URL": "https://script.google.com/macros/s/AKfycbzi3Cy5rJ2pB2QH1B7p-d7HUw9xNPwF1pUrUS6lDRmznQ-Ss1X2js_YNr3wK6vBSTTh/exec",
-  "API_KEY": "k2/d+8hjkJleiAlMFs8qrwjUbhtIRuB9",
+  "API_KEY": "consultar no GAS",
   "SHEET_ID": "<ID da planilha Google Sheets — solicitar ao responsável do projeto>"
 }
 ```
