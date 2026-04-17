@@ -26,3 +26,8 @@ desktop.ini
 
 # Logs locais
 *.log
+
+# Vídeos grandes
+*.mp4
+*.avi
+*.mov

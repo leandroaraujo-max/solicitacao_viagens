@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // Notificacoes.gs — Templates de e-mail e GmailApp
 // ============================================================
 
@@ -535,14 +535,6 @@ function enviarEmailAprovacaoN2(reqID, req, emailN1, agenciaEscolhidaN1) {
   GmailApp.sendEmail(cadeia.n2_email,
     `[APROVACAO N2] Viagem Emergencial - ${req.nome_viajante} | ${reqID}`,
     '', { htmlBody: html, name: 'Sistema de Viagens Magalu', replyTo: cfg.EMAIL_VIAGENS });
-}
-
-/**
- * Notifica o RH sobre exceção de quarto individual.
- * MVP: desabilitado (D15).
- */
-function notificarRHExcecaoSaude(reqID, viajante, solicitacao) {
-  Logger.log(`[MVP] notificarRHExcecaoSaude ignorada para reqID=${reqID} (D15)`);
 }
 
 /**

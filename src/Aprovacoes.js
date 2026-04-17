@@ -397,14 +397,6 @@ function verificarSLAAprovacaoN2(row, agora, cfg) {
 }
 
 // ── Páginas de erro/sucesso HTML ─────────────────────────────
-/**
- * Aprovação de exceção de saúde pelo RH/Medicina do Trabalho.
- * [MVP] Fluxo RH desabilitado (D15) — função mantida para não quebrar as rotas.
- */
-function aprovarExcecaoRH(payload) {
-  Logger.log(`[RH] aprovarExcecaoRH chamado para reqID=${payload.reqID} — descartado no MVP (D15).`);
-  return { aprovado: false, motivo: 'Fluxo RH não habilitado no MVP.' };
-}
 
 /**
  * Executa uma ação de aprovação/reprovação diretamente pelo Portal do Setor,

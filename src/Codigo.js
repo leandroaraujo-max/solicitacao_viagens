@@ -109,7 +109,6 @@ function doPost(e) {
     salvarExcecaoLaudo:       () => salvarExcecaoQuartoIndividual(payload),
     submeterCotacaoAgencia:   () => submeterCotacaoAgencia(payload),
     uploadVoucher:            () => uploadVoucher(payload),
-    aprovarExcecaoRH:         () => aprovarExcecaoRH(payload),
     carregarSolicitacaoAgencia: () => carregarSolicitacaoAgencia(payload.reqID, payload.agencia),
     calcularDistancia:        () => calcularDistanciaKm(payload.origem, payload.destino),
     listarSolicitacoes:       () => listarSolicitacoes(payload.cpf),
@@ -126,6 +125,7 @@ function doPost(e) {
     _debug_deletarLinha:      () => _debugDeletarLinha(payload.aba, payload.coluna, payload.valor),
     _debug_migrarViajantes:   () => { TESTE_migrarViajantesHeader(); return { ok: true }; },
     _debug_migrarSolicitacoesHeader: () => { _migrarSolicitacoesHeader(); return { ok: true }; },
+    _debug_migrarDeleteRH:    () => { _migrarDeleteRH(); return { ok: true }; },
     _debug_setProperty: () => {
       // Permite configurar Script Properties via MCP (protegido por API key)
       PropertiesService.getScriptProperties().setProperty(payload.chave, payload.valor);
@@ -177,7 +177,6 @@ function doPost_proxy(payload) {
     salvarExcecaoLaudo:          () => salvarExcecaoQuartoIndividual(payload),
     submeterCotacaoAgencia:      () => submeterCotacaoAgencia(payload),
     uploadVoucher:               () => uploadVoucher(payload),
-    aprovarExcecaoRH:            () => aprovarExcecaoRH(payload),
     // L1-B: casamento de viagens
     vincularSolicitacoes:        () => vincularSolicitacoes(payload.reqID1, payload.reqID2, payload.operadorEmail),
     ignorarMatch:                () => ignorarMatch(payload.reqID1, payload.reqID2, payload.operadorEmail, payload.motivo),
@@ -442,9 +441,9 @@ function inicializarPlanilha() {
       'preferencia_voo_cia', 'preferencia_voo_numero', 'preferencia_voo_saida', 'preferencia_voo_chegada',
       'preferencia_voo_paradas', 'preferencia_voo_bagagem', 'preferencia_voo_valor',
       'preferencia_hotel_nome', 'preferencia_hotel_estrelas', 'preferencia_hotel_diaria', 'preferencia_hotel_total',
-      // Exceção saúde (9)
+      // Exceção saúde (8)
       'quarto_excecao_saude', 'excecao_pre_aprovada', 'excecao_motivo', 'excecao_cid', 'excecao_laudo_link',
-      'excecao_laudo_nome', 'excecao_validade', 'excecao_obs', 'excecao_status_rh', 'excecao_rh_em',
+      'excecao_laudo_nome', 'excecao_validade', 'excecao_obs',
       // Casamento (5)
       'match_req_ids', 'match_viajantes', 'match_tipo_servico', 'match_operador', 'match_em',
       // Aprovação N1 (7)
@@ -456,8 +455,6 @@ function inicializarPlanilha() {
       'aprovador_n2_email_enviado_em',
       // E1 — pré-aprovação setor
       'pre_aprovacao_email', 'pre_aprovacao_em',
-      // RH (4)
-      'rh_excecao_solicitada', 'rh_aprovador_email', 'rh_acao', 'rh_em',
       // Status geral + agência
       'status_aprovacao_geral', 'agencia_vencedora',
       // Cotações Tastur (39)
@@ -687,6 +684,24 @@ function TESTE_migrarViajantesHeader() {
  * Migração: nomeia as 3 colunas sem header no final da aba Solicitacoes
  * (assento_especial, motivo_assento_especial, cod_centro_custo)
  */
+function _migrarDeleteRH() {
+  const cfg = getConfig();
+  const sheet = SpreadsheetApp.openById(cfg.SHEET_ID).getSheetByName('Solicitacoes');
+  const headers = sheet.getDataRange().getValues()[0];
+  
+  const colunasParaRemover = [
+    'excecao_status_rh', 'excecao_rh_em',
+    'rh_excecao_solicitada', 'rh_aprovador_email', 'rh_acao', 'rh_em'
+  ];
+  
+  // Deletar de trás pra frente para não deslocar os índices dos subsequentes acidentalmente
+  for (let i = headers.length - 1; i >= 0; i--) {
+    if (colunasParaRemover.includes(headers[i])) {
+      sheet.deleteColumn(i + 1);
+    }
+  }
+}
+
 function _migrarSolicitacoesHeader() {
   const cfg = getConfig();
   const ss  = SpreadsheetApp.openById(cfg.SHEET_ID);

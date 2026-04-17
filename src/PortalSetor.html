@@ -87,10 +87,11 @@
     .badge-comum              { background: #e8eaf6; color: #283593; }
 
     /* ── Botões de ação ──────────────────────────────────────── */
-    .acoes { display: flex; gap: 6px; flex-wrap: wrap; }
+    .acoes { display: flex; gap: 6px; flex-wrap: nowrap; align-items: center; }
     .btn-acao {
-      padding: 5px 10px; border-radius: 5px; font-size: 12px;
+      padding: 6px 12px; border-radius: 6px; font-size: 12px;
       font-weight: 600; cursor: pointer; border: none; transition: opacity 0.15s;
+      white-space: nowrap;
     }
     .btn-acao:hover { opacity: 0.85; }
     .btn-pre-aprovar  { background: #43a047; color: #fff; }
@@ -472,18 +473,23 @@
 
     const linhas = filtrada.map(function(r) {
       const acoes = montarBotoesAcao(r);
+      // Função para Title Case
+      const formatarNome = (s) => (s||'').toLowerCase().replace(/(?:^|\s)\S/g, l => l.toUpperCase());
+      const emailLower = (r.email || '').toLowerCase();
+      const servicosExibicao = (r.tipo_servico || '—').replace(/,/g, ', ');
+
       return '<tr>' +
-        '<td><div class="req-id">' + r.req_id + '</div>' +
+        '<td style="white-space:nowrap"><div class="req-id">' + r.req_id + '</div>' +
           '<div class="viajante-info">' + fmtData(r.criado_em) + '</div>' +
           (r.classificacao_aereo === 'Emergencial'
-            ? '<span class="badge badge-emergencial" style="font-size:10px">EMERG.</span>' : '') +
+            ? '<span class="badge badge-emergencial" style="font-size:10px; margin-top:4px">EMERG.</span>' : '') +
         '</td>' +
-        '<td><div class="viajante-nome">' + (r.nome_viajante || '—') + '</div>' +
-          '<div class="viajante-info">' + (r.email || '') + '</div>' +
+        '<td><div class="viajante-nome">' + (formatarNome(r.nome_viajante) || '—') + '</div>' +
+          '<div class="viajante-info" style="word-break: break-all; max-width: 180px;">' + emailLower + '</div>' +
         '</td>' +
-        '<td>' + (r.destino_cidade || '—') + (r.destino_estado ? ', ' + r.destino_estado : '') + '</td>' +
-        '<td>' + fmtData(r.data_ida) + '</td>' +
-        '<td><small>' + (r.tipo_servico || '—') + '</small></td>' +
+        '<td style="min-width: 100px;">' + (formatarNome(r.destino_cidade) || '—') + (r.destino_estado ? ', ' + r.destino_estado.toUpperCase() : '') + '</td>' +
+        '<td style="white-space:nowrap">' + fmtData(r.data_ida) + '</td>' +
+        '<td style="color:#555; font-size:11px; max-width:140px;">' + servicosExibicao + '</td>' +
         '<td>' + badgeStatus(r.status) + '</td>' +
         '<td><div class="acoes">' + acoes + '</div></td>' +
         '</tr>';
@@ -560,23 +566,101 @@
 
     let body = '';
 
-    // Dados da solicitação
+    // Dados do Viajante
     body += '<div class="detail-section">' +
-      '<div class="detail-section-title">Solicitação</div>' +
+      '<div class="detail-section-title">Viajante</div>' +
       '<div class="detail-grid">' +
-      di('Viajante',    r.nome_viajante) +
-      di('E-mail',      r.email) +
-      di('Origem',      (r.origem_cidade || '') + (r.origem_estado ? ', ' + r.origem_estado : '')) +
-      di('Destino',     (r.destino_cidade || '') + (r.destino_estado ? ', ' + r.destino_estado : '')) +
-      di('Data Ida',    fmtData(r.data_ida)) +
-      di('Data Volta',  fmtData(r.data_volta)) +
-      di('Tipo Serviço', r.tipo_servico) +
-      di('Classificação', r.classificacao_aereo) +
-      di('Motivo',      r.motivo_viagem) +
-      di('Quarto',      r.quarto_tipo_solicitado) +
-      di('Criado em',   fmtData(r.criado_em)) +
-      di('Liderança',   (r.aprovador_n1_nome || '—') + (r.aprovador_n1_acao ? ' — ' + r.aprovador_n1_acao : '')) +
+      di('Nome',          r.nome_viajante) +
+      di('E-mail',        r.email) +
+      di('CPF',           r.cpf_viajante) +
+      di('Matrícula',     r.matricula_viajante) +
+      di('Centro de Custo', r.cod_centro_custo) +
+      di('Operador (Em nome de)', r.nome_operador && r.nome_operador !== r.nome_viajante ? r.nome_operador : '') +
       '</div></div>';
+
+    // Dados Gerais da Viagem
+    body += '<div class="detail-section">' +
+      '<div class="detail-section-title">Detalhes Gerais da Viagem</div>' +
+      '<div class="detail-grid">' +
+      di('Tipo de Serviço',  r.tipo_servico) +
+      di('Origem',           (r.origem_cidade || '') + (r.origem_estado ? ', ' + r.origem_estado : '')) +
+      di('Destino',          (r.destino_cidade || '') + (r.destino_estado ? ', ' + r.destino_estado : '')) +
+      di('Data Ida',         fmtData(r.data_ida)) +
+      di('Data Volta',       fmtData(r.data_volta)) +
+      di('Classificação',    r.classificacao_aereo) +
+      di('Motivo',           r.motivo_viagem) +
+      di('Observações',      r.observacoes_viajante) +
+      di('Liderança',        (r.aprovador_n1_nome || '—') + (r.aprovador_n1_acao ? ' (' + r.aprovador_n1_acao + ')' : '')) +
+      di('Antecedência',     r.antecedencia_dias ? r.antecedencia_dias + ' dias' : '') +
+      di('Criado em',        fmtData(r.criado_em)) +
+      '</div></div>';
+
+    // Aéreo
+    if ((r.tipo_servico || '').includes('Aéreo')) {
+      body += '<div class="detail-section">' +
+        '<div class="detail-section-title">Detalhes GDC / Aéreo</div>' +
+        '<div class="detail-grid">' +
+        di('Período Preferido', r.aereo_periodo_preferido) +
+        di('Tipo Trecho', r.aereo_tipo_trecho) +
+        di('Bagagem Extra', String(r.bagagem_extra) === 'true' ? 'Sim' : 'Não') +
+        di('Assento Especial', r.assento_especial ? r.assento_especial + (r.motivo_assento_especial ? ' (' + r.motivo_assento_especial + ')' : '') : '') +
+        di('Preferência Cia', r.preferencia_voo_cia) +
+        di('Preferência Voo', r.preferencia_voo_numero) +
+        di('Saída Pref.', r.preferencia_voo_saida) +
+        di('Chegada Pref.', r.preferencia_voo_chegada) +
+        '</div></div>';
+    }
+
+    // Rodoviário
+    if ((r.tipo_servico || '').includes('Rodoviário')) {
+      body += '<div class="detail-section">' +
+        '<div class="detail-section-title">Detalhes Rodoviário</div>' +
+        '<div class="detail-grid">' +
+        di('Ida Pref.', fmtData(r.rodov_data_ida)) +
+        di('Volta Pref.', fmtData(r.rodov_data_volta)) +
+        di('Período', r.rodov_periodo_preferido) +
+        di('Elegibilidade Aéreo', r.aereo_elegivel) +
+        di('Distância Rota', r.distancia_km ? r.distancia_km + ' km' : '') +
+        di('Tipo Ônibus', r.rodov_tipo_onibus) +
+        '</div></div>';
+    }
+
+    // Hospedagem
+    if ((r.tipo_servico || '').includes('Hospedagem')) {
+      body += '<div class="detail-section">' +
+        '<div class="detail-section-title">Detalhes Hospedagem</div>' +
+        '<div class="detail-grid">' +
+        di('Quarto Solicitado', r.quarto_tipo_solicitado) +
+        di('Preferência Nome', r.preferencia_hotel_nome) +
+        di('Estrelas Pref.', r.preferencia_hotel_estrelas) +
+        '</div></div>';
+    }
+
+    // Carro
+    if ((r.tipo_servico || '').includes('Carro')) {
+      body += '<div class="detail-section">' +
+        '<div class="detail-section-title">Detalhes Carro</div>' +
+        '<div class="detail-grid">' +
+        di('Tipo Solicitado', r.veiculo_tipo_solicitado) +
+        di('Retirada', (r.carro_cidade_retirada||'') + (r.carro_hora_retirada ? ' às ' + r.carro_hora_retirada : '')) +
+        di('Devolução', (r.carro_cidade_devolucao||'') + (r.carro_hora_devolucao ? ' às ' + r.carro_hora_devolucao : '')) +
+        '</div></div>';
+    }
+
+    // Condições Especiais de Saúde
+    if (String(r.quarto_excecao_saude) === 'true' || r.excecao_motivo || r.excecao_pre_aprovada) {
+      body += '<div class="detail-section">' +
+        '<div class="detail-section-title">Condições de Exceção/Saúde</div>' +
+        '<div class="detail-grid">' +
+        di('Quarto Exceção', String(r.quarto_excecao_saude) === 'true' ? 'Sim' : 'Não') +
+        di('Pré-Aprovado', String(r.excecao_pre_aprovada) === 'true' ? 'Sim' : '') +
+        di('Motivo', r.excecao_motivo) +
+        di('CID', r.excecao_cid) +
+        di('Validade Laudo', r.excecao_validade) +
+        di('Obs', r.excecao_obs) +
+        (r.excecao_laudo_link ? di('Laudo', '<a href="'+r.excecao_laudo_link+'" target="_blank">Visualizar Laudo</a>') : '') +
+        '</div></div>';
+    }
 
     // Cotações (se disponíveis)
     if (r.cotacao_tastur_enviado_em || r.cotacao_kontrip_enviado_em) {
@@ -624,14 +708,6 @@
         '</div></div>';
     }
 
-    // Exceção de saúde
-    if (String(r.quarto_excecao_saude) === 'true') {
-      body += '<div class="detail-section">' +
-        '<div class="detail-section-title">Excecao de Saude</div>' +
-        '<div class="detail-grid">' +
-        di('Status RH', r.excecao_status_rh || 'Pendente') +
-        '</div></div>';
-    }
 
     document.getElementById('modalBody').innerHTML = body;
 
@@ -644,8 +720,9 @@
   }
 
   function di(label, value) {
+    if (value === undefined || value === null || value === '' || value === false || value === 'false' || value === '—') return '';
     return '<div class="detail-item"><div class="detail-label">' + label + '</div>' +
-      '<div class="detail-value">' + (value || '—') + '</div></div>';
+      '<div class="detail-value">' + value + '</div></div>';
   }
   function cl(label, value) {
     return '<div class="cotacao-linha"><b>' + label + ':</b> ' + (value || '—') + '</div>';

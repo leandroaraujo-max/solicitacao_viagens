@@ -31,12 +31,6 @@ function submeterSolicitacao(payload) {
   const cadeia = extrairCadeiaAprovacao(payload.cpf_viajante || payload.matricula_viajante);
   validarCadeiaAprovacao(cadeia, payload.cpf_viajante || payload.matricula_viajante);
 
-  // 6. E3: condicao especial pré-aprovada pelo perfil
-  let excecaoStatusRH = '';
-  if (payload.excecao_pre_aprovada) {
-    excecaoStatusRH = 'Pre-aprovado';
-  }
-
   // 7. Monta linha para a Sheet (v2 — com todos os novos campos)
   const agora2 = new Date();
   const linha = [
@@ -105,7 +99,6 @@ function submeterSolicitacao(payload) {
     payload.excecao_motivo || '', payload.excecao_cid || '',
     '', '',  // laudo_link, laudo_nome (gravados pelo upload de laudo)
     payload.excecao_validade || '', payload.excecao_obs || '',
-    excecaoStatusRH, '',     // excecao_status_rh, excecao_rh_em
     // Casamento (5)
     '', '', '', '', '',
     // Aprovação N1
@@ -116,8 +109,6 @@ function submeterSolicitacao(payload) {
     '', '', '',
     // E1 — pré-aprovação setor
     '', '',
-    // RH
-    payload.quarto_excecao_saude || false, '', '', '',
     // Status geral + agência
     'Pendente Aprovação Liderança', '',
     // Cotações Tastur + Kontrip — 38 colunas cada = 76 vazias
