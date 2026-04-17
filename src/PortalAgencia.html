@@ -532,7 +532,17 @@ function exibirSecoesServico(req) {
     }
     if (req.carro_cidade_retirada) {
       const el = document.getElementById('carroLocal');
-      if (el) el.value = req.carro_cidade_retirada;
+      if (el) {
+        // Se o valor já estiver no formato [IATA] - Nome do Aeroporto, Cidade, mantém. Caso contrário, tenta formatar.
+        const val = req.carro_cidade_retirada;
+        if (/^\[[A-Z]{3}\]/.test(val)) {
+          el.value = val;
+        } else if (req.carro_iata && req.carro_nome_aeroporto) {
+          el.value = `[${req.carro_iata}] - ${req.carro_nome_aeroporto}, ${val}`;
+        } else {
+          el.value = val;
+        }
+      }
     }
     // Auto-seleciona categoria baseado no perfil do viajante
     if (req.veiculo_tipo_solicitado) {

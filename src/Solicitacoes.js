@@ -90,7 +90,6 @@ function submeterSolicitacao(payload) {
     payload.preferencia_voo_bagagem !== undefined ? payload.preferencia_voo_bagagem : '',
     payload.preferencia_voo_valor   || '',
     payload.preferencia_hotel_nome  || '',
-    payload.preferencia_hotel_estrelas || '',
     payload.preferencia_hotel_diaria || '',
     payload.preferencia_hotel_total  || '',
     // Exceção saúde — E3: pre_aprovada

@@ -25,6 +25,13 @@
   </div>
 </header>
 
+<!-- Botão Voltar para o Portal do Setor -->
+<div style="margin: 18px 0 0 0; text-align: left;">
+  <a href="<?= webAppUrl ?>?modo=setor" style="display:inline-block;padding:7px 18px;background:#1976d2;color:#fff;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;box-shadow:0 1px 4px #0001;">
+    ← Voltar para o Portal do Setor
+  </a>
+</div>
+
 <main class="container">
 
   <!-- ── Navegação por abas ─────────────────────────────── -->
@@ -200,7 +207,15 @@
         </label>
       </div>
       <!-- Cabine fixa economy para evitar tarifas caras -->
-      <input type="hidden" id="selCabine" value="economy" />
+      <div class="field-group" style="margin-top:8px">
+        <label for="selCabine">Opções de Assento (Cabin Class)</label>
+        <select id="selCabine">
+          <option value="economy" selected>Econômica</option>
+          <option value="premium_economy">Premium Economy</option>
+          <option value="business">Executiva</option>
+          <option value="first">Primeira Classe</option>
+        </select>
+      </div>
     </div>
 
     <!-- Bloco Rodoviário -->
@@ -283,7 +298,6 @@
     <!-- Bloco de hospedagem (aparece quando Hospedagem selecionado) -->
     <div id="blocoHospedagem" class="card card-inner hidden">
       <h3>🏨 Hospedagem</h3>
-      <div id="categoriaHospedagem" class="categoria-badge"></div>
 
       <div id="blocoExcecaoSaude" class="field-group hidden">
         <!-- Preenchido dinamicamente por onServicoChange():
@@ -355,20 +369,10 @@
       <div id="secaoBuscaHotel" class="hidden" style="margin-top:16px">
         <h4 style="margin:12px 0 8px">🏨 Preferência de Hospedagem</h4>
         <p class="field-hint">Informe o nome de um hotel de referência. A agência usará como base para a cotação.</p>
-        <div class="grid-2" style="align-items:end">
-          <div class="field-group">
-            <label>Nome do hotel sugerido</label>
-            <input type="text" id="hotelNomePref" placeholder="Ex: Ibis São Paulo Center, Marriott Berrini..." />
-          </div>
-          <div class="field-group">
-            <label>Categoria mínima</label>
-            <select id="hotelEstrelasPref">
-              <option value="">Sem preferência</option>
-              <option value="3">3 ★★★</option>
-              <option value="4">4 ★★★★</option>
-              <option value="5">5 ★★★★★</option>
-            </select>
-          </div>
+        <div class="field-group">
+          <label>Nome do hotel sugerido</label>
+          <input type="text" id="hotelNomePref" placeholder="Ex: Ibis São Paulo Center, Marriott Berrini..." />
+          <div id="categoriaHospedagem" class="categoria-badge" style="margin-top:8px"></div>
         </div>
         <button class="btn-secondary" onclick="confirmarHotel()" style="margin-top:8px">✅ Confirmar preferência</button>
         <div id="hotelSelecionado" class="amadeus-selecionado hidden"></div>
@@ -982,10 +986,14 @@ function onServicoChange() {
   const temHosp      = servicos.includes('Hospedagem');
   const temCarro     = servicos.includes('Carro');
 
-  document.getElementById('blocoAereoOpcoes').classList.toggle('hidden', !temAereo);
-  document.getElementById('blocoRodoviario').classList.toggle('hidden', !temRodov);
-  document.getElementById('blocoCarroOpcoes').classList.toggle('hidden', !temCarro);
-  document.getElementById('blocoHospedagem').classList.toggle('hidden', !temHosp);
+  const blocoAereoOpcoes = document.getElementById('blocoAereoOpcoes');
+  if (blocoAereoOpcoes) blocoAereoOpcoes.classList.toggle('hidden', !temAereo);
+  const blocoRodoviario = document.getElementById('blocoRodoviario');
+  if (blocoRodoviario) blocoRodoviario.classList.toggle('hidden', !temRodov);
+  const blocoCarroOpcoes = document.getElementById('blocoCarroOpcoes');
+  if (blocoCarroOpcoes) blocoCarroOpcoes.classList.toggle('hidden', !temCarro);
+  const blocoHospedagem = document.getElementById('blocoHospedagem');
+  if (blocoHospedagem) blocoHospedagem.classList.toggle('hidden', !temHosp);
 
   if (temHosp && estado.viajante?.categoria_hospedagem === 'Compartilhado') {
     const bloco = document.getElementById('blocoExcecaoSaude');
@@ -1009,10 +1017,13 @@ function onServicoChange() {
     }
   }
 
-  document.getElementById('secaoBuscaVoo').classList.toggle('hidden', !temAereo);
-  document.getElementById('secaoAssentoEspecial').classList.toggle('hidden', !temAereo);
+  const secaoBuscaVoo = document.getElementById('secaoBuscaVoo');
+  if (secaoBuscaVoo) secaoBuscaVoo.classList.toggle('hidden', !temAereo);
+  const secaoAssentoEspecial = document.getElementById('secaoAssentoEspecial');
+  if (secaoAssentoEspecial) secaoAssentoEspecial.classList.toggle('hidden', !temAereo);
   if (temAereo) selecionarTrecho('ida');  // inicializa tabs e pré-preenche campos
-  document.getElementById('secaoBuscaHotel').classList.toggle('hidden', !temHosp);
+  const secaoBuscaHotel = document.getElementById('secaoBuscaHotel');
+  if (secaoBuscaHotel) secaoBuscaHotel.classList.toggle('hidden', !temHosp);
 
   // valida aéreo vs distância
   if (temAereo && estado.distanciaKm != null && estado.distanciaKm < 400) {
@@ -1351,15 +1362,13 @@ function limparVoo(trecho) {
 function confirmarHotel() {
   const nome = document.getElementById('hotelNomePref').value.trim();
   if (!nome) return alertar('Informe o nome do hotel de preferência.');
-  const estrelas = document.getElementById('hotelEstrelasPref').value;
   estado.preferencia_hotel = {
     preferencia_hotel_nome:     nome,
-    preferencia_hotel_estrelas: estrelas||'',
     preferencia_hotel_diaria:   '',
     preferencia_hotel_total:    '',
   };
   document.getElementById('hotelSelecionado').innerHTML =
-    `<div class="amadeus-selecionado-badge">✅ <strong>${nome}</strong>${estrelas?' — '+estrelas+' ★':''} <a href="#" onclick="limparHotel();return false" style="margin-left:8px;color:#e53935;font-size:12px">✕</a></div>`;
+    `<div class="amadeus-selecionado-badge">✅ <strong>${nome}</strong> <a href="#" onclick="limparHotel();return false" style="margin-left:8px;color:#e53935;font-size:12px">✕</a></div>`;
   document.getElementById('hotelSelecionado').classList.remove('hidden');
 }
 
@@ -1367,7 +1376,6 @@ function limparHotel() {
   estado.preferencia_hotel = null;
   document.getElementById('hotelSelecionado').classList.add('hidden');
   document.getElementById('hotelNomePref').value='';
-  document.getElementById('hotelEstrelasPref').value='';
 }
 
 // ── Guardas UI ────────────────────────────────────────────────
