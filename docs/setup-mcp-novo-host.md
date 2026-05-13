@@ -1,7 +1,8 @@
 # Setup do MCP Server — Novo Host
 
 > Instruções para replicar o servidor MCP local em outro computador.  
-> Cole este documento em uma conversa com a IA e peça: **"Siga as instruções do setup-mcp-novo-host.md"**
+> Cole este documento em uma conversa com a IA e peça:  
+> **"Siga as instruções do setup-mcp-novo-host.md"**
 
 ---
 
@@ -10,11 +11,11 @@
 | Ferramenta | Versão mínima | Instalação |
 |---|---|---|
 | Node.js | 18 LTS | https://nodejs.org |
-| npm | 9+ | Incluído com Node.js |
+| npm | 9+ | Incluído no Node.js |
 | clasp (Google) | 2.4+ | `npm install -g @google/clasp` |
-| Git | qualquer | https://git-scm.com |
+| Git | Qualquer | https://git-scm.com |
 | VS Code | 1.90+ | https://code.visualstudio.com |
-| Extensão GitHub Copilot Chat | qualquer | Marketplace VS Code |
+| Extensão GitHub Copilot Chat | Qualquer | Marketplace do VS Code |
 
 ---
 
@@ -23,56 +24,50 @@
 ```bash
 git clone https://github.com/leandroaraujo-max/solicitacao_viagens.git
 cd solicitacao_viagens
-```
 
----
+Passo 2 — Instalar dependências
 
-## Passo 2 — Instalar dependências
-
-```bash
 npm install
-```
 
-Isso instala `@modelcontextprotocol/sdk` listado em `devDependencies`.
+Isso instalará o pacote @modelcontextprotocol/sdk listado nas devDependencies.
 
----
+Nota:
+Se houver bloqueio da rede corporativa (erro 403), utilize:
 
-## Passo 3 — Autenticar o clasp com o Google
+Isso instalará o pacote @modelcontextprotocol/sdk listado nas devDependencies.
 
-```bash
-npx clasp login
-```
+Nota:
+Se houver bloqueio da rede corporativa (erro 403), utilize:
 
-- O browser será aberto pedindo login Google
-- Use a **conta corporativa** `@luizalabs.com` ou `@magalu.com` que tem acesso ao Script GAS
-- Após login, o arquivo `~/.clasprc.json` será criado automaticamente com os tokens OAuth
+npm install --no-fund --no-audit --userconfig=NUL
 
-> **O servidor MCP lê os tokens diretamente de `~/.clasprc.json` e faz auto-refresh automático.  
-> Não é necessário nenhuma configuração manual de token.**
+Passo 3 — Autenticar o clasp com o Google
 
----
+npx @google/clasp login
 
-## Passo 4 — Criar o `.mcp-config.json` na raiz do projeto
+O navegador será aberto para login.
+Utilize a conta corporativa (@luizalabs.com ou @magalu.com).
+O arquivo ~/.clasprc.json será criado automaticamente com os tokens OAuth.
+O MCP utiliza esse arquivo diretamente e faz auto-refresh dos tokens.
 
-Crie o arquivo `.mcp-config.json` na raiz do repositório (ao lado do `package.json`) com o conteúdo abaixo:
+Não é necessária configuração manual de token.
 
-```json
+Passo 4 — Criar o .mcp-config.json
+
+Crie o arquivo na raiz do projeto (ao lado do package.json):
+
 {
   "WEBAPP_URL": "https://script.google.com/macros/s/AKfycbzi3Cy5rJ2pB2QH1B7p-d7HUw9xNPwF1pUrUS6lDRmznQ-Ss1X2js_YNr3wK6vBSTTh/exec",
   "API_KEY": "consultar no GAS",
-  "SHEET_ID": "<ID da planilha Google Sheets — solicitar ao responsável do projeto>"
+  "SHEET_ID": "<ID da planilha Google Sheets — solicitar ao responsável>"
 }
-```
 
-> ⚠️ Este arquivo está no `.gitignore` — **não é commitado**. Você precisa criá-lo manualmente em cada máquina.
+⚠️ Este arquivo está no .gitignore e deve ser criado manualmente em cada máquina.
 
----
+Passo 5 — Verificar o .vscode/mcp.json
 
-## Passo 5 — Verificar que o `.vscode/mcp.json` existe
+Arquivo já versionado no repositório:
 
-O arquivo `.vscode/mcp.json` já está no repositório e registra o servidor MCP no VS Code:
-
-```json
 {
   "servers": {
     "viagens-magalu": {
@@ -84,72 +79,87 @@ O arquivo `.vscode/mcp.json` já está no repositório e registra o servidor MCP
     }
   }
 }
-```
 
-Nenhuma alteração é necessária — o VS Code detecta automaticamente ao abrir a pasta.
+Nenhuma alteração é necessária.
 
----
+Passo 6 — Testar no VS Code
+Abra o projeto no VS Code:
 
-## Passo 6 — Abrir o projeto no VS Code e verificar o servidor
+code .
 
-1. Abra a pasta do projeto no VS Code: `code .`
-2. Abra o painel **GitHub Copilot Chat**
-3. No campo de chat, clique no ícone de ferramentas (MCP) — o servidor `viagens-magalu` deve aparecer como disponível
-4. Teste com a pergunta: `liste as abas disponíveis na planilha`
+Abra o GitHub Copilot Chat
+Clique no ícone de ferramentas (MCP)
+Verifique se aparece: viagens-magalu
+Teste:
 
-Se o servidor estiver funcionando, a IA usará a tool `sheets_cabecalho` ou `sheets_ler_aba` e retornará dados reais.
+liste as abas disponíveis na planilha
 
----
+Se tudo estiver correto, a IA utilizará tools como:
 
-## Tools disponíveis no MCP
+sheets_cabecalho
+sheets_ler_aba
 
-| Tool | O que faz |
-|---|---|
-| `sheets_ler_aba` | Lê todas as linhas de uma aba da planilha (ex: `Solicitacoes`, `Viajantes`) |
-| `sheets_cabecalho` | Retorna o cabeçalho (linha 1) de uma aba |
-| `sheets_buscar_linha` | Busca linhas por valor em uma coluna específica |
-| `gas_executar` | Executa qualquer ação do backend GAS via `doPost` (ex: `submeterSolicitacao`, `_debug_setProperty`) |
+Tools disponíveis no MCP
+Tool	Funcionalidade
+sheets_ler_aba	Lê todas as linhas de uma aba
+sheets_cabecalho	Retorna cabeçalho da aba
+sheets_buscar_linha	Busca linhas por valor
+gas_executar	Executa ações no GAS
+Troubleshooting (Solução de Problemas)
+~/.clasprc.json não encontrado
 
----
+npx @google/clasp login
 
-## Troubleshooting
+Falha ao renovar token
 
-### `~/.clasprc.json não encontrado`
-Execute `npx clasp login` novamente.
+Reautentique:
 
-### `Falha ao renovar token`
-O token OAuth expirou e o `refresh_token` foi invalidado (isso acontece se a conta fez logout ou houve revogação). Execute `npx clasp login` novamente para reautenticar.
+npx @google/clasp login
 
-### `Resposta inesperada do GAS`
-- Verifique se `WEBAPP_URL` no `.mcp-config.json` está correto
-- Verifique se o deployment ID do GAS ainda está ativo: `npx clasp deployments`
-- O deployment ativo deve ser o ID `AKfycbzi3Cy5rJ2pB2QH1B7p-d7HUw9xNPwF1pUrUS6lDRmznQ-Ss1X2js_YNr3wK6vBSTTh`
+Resposta inesperada do GAS
 
-### Servidor não aparece no Copilot Chat
-- Reabra o VS Code na pasta do projeto (não como arquivo solto)
-- Confirme que `.vscode/mcp.json` existe na raiz do projeto
-- Verifique se a extensão GitHub Copilot Chat está atualizada
+Verifique:
 
-### `API_KEY inválida` em rotas `_debug_*`
-A `API_KEY` no `.mcp-config.json` deve coincidir exatamente com a Script Property `MCP_API_KEY` configurada no GAS. O valor atual está listado no arquivo acima — se foi rotacionado, solicitar ao responsável do projeto.
+WEBAPP_URL no .mcp-config.json
+Deployment ativo:
 
----
+npx @google/clasp deployments
 
-## Rodar o servidor manualmente (fora do VS Code)
+Deployment esperado:
 
-```bash
+AKfycbzi3Cy5rJ2pB2QH1B7p-d7HUw9xNPwF1pUrUS6lDRmznQ-Ss1X2js_YNr3wK6vBSTTh
+Servidor não aparece no Copilot Chat
+Reinicie o VS Code
+Abra a pasta raiz (não arquivo isolado)
+Verifique .vscode/mcp.json
+Atualize o Copilot Chat
+API_KEY inválida
+
+A chave deve coincidir com:
+
+MCP_API_KEY (Script Properties no GAS)
+Rodar o servidor manualmente
 npm run mcp
-```
 
-Isso executa `node mcp/server.js` via stdio. Útil para depurar o servidor isolado.
+Executa:
 
----
+node mcp/server.js
 
-## Informações do projeto para referência
+Usado para debug via terminal.
 
-| Item | Valor |
-|---|---|
-| Script GAS ID | `157FO7diD5kMP3FWh6tkFvPveElKHhVzJKrdPMqTvaQw-sce_wTq4jwXX` |
-| Deployment ID | `AKfycbzi3Cy5rJ2pB2QH1B7p-d7HUw9xNPwF1pUrUS6lDRmznQ-Ss1X2js_YNr3wK6vBSTTh` |
-| Repositório | `https://github.com/leandroaraujo-max/solicitacao_viagens` |
-| Deploy atual | @89 |
+Informações do projeto
+Item	Valor
+Script GAS ID	157FO7diD5kMP3FWh6tkFvPveElKHhVzJKrdPMqTvaQw-sce_wTq4jwXX
+Deployment ID	AKfycbzi3Cy5rJ2pB2QH1B7p-d7HUw9xNPwF1pUrUS6lDRmznQ-Ss1X2js_YNr3wK6vBSTTh
+Repositório	https://github.com/leandroaraujo-max/solicitacao_viagens
+
+Deploy atual	@101
+
+Se quiser, posso evoluir isso para um **padrão corporativo nível Magalu** com:
+- versionamento do documento
+- checklist de auditoria
+- validação automática pós-setup
+- script de healthcheck do MCP
+
+Só falar.
+
