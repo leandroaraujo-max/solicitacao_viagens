@@ -305,40 +305,52 @@ function uploadVoucher(payload) {
 /**
  * Verifica se todos os vouchers do tipo de serviço foram enviados.
  * Se sim, conclui a solicitação e notifica o viajante.
+ * Guard anti-duplicata: re-lê a solicitação dentro de lock exclusivo e
+ * verifica concluido_em antes de disparar qualquer notificação.
  */
 function verificarConclusaoVouchers(reqID, req) {
   const tipos = Array.isArray(req.tipo_servico) ? req.tipo_servico : [req.tipo_servico];
-  const reqAtualizado = getRequisicao(reqID);
 
-  const pendente = tipos.some(t => {
-    if (t === 'Aereo'     && !reqAtualizado.voucher_aereo_link)  return true;
-    if (t === 'Hospedagem' && !reqAtualizado.voucher_hotel_link) return true;
-    if (t === 'Carro'      && !reqAtualizado.voucher_carro_link) return true;
-    return false;
-  });
+  _comLock(() => {
+    // Re-lê estado mais recente dentro do lock para evitar race condition
+    const reqAtualizado = getRequisicao(reqID);
 
-  if (!pendente) {
-    atualizarStatusSolicitacao(reqID, 'Concluída');
-    atualizarCampoSolicitacao(reqID, 'concluido_em', new Date());
-    notificarViajanteSolicitacaoAprovada(reqAtualizado, reqAtualizado.agencia_vencedora);
-    enviarVouchersAoViajante(reqAtualizado);
-    // Notifica também o setor de viagens com cópia dos vouchers
-    const cfg = getConfig();
-    if (cfg.EMAIL_VIAGENS) {
-      const links = [
-        reqAtualizado.voucher_aereo_link  ? `<li><a href="${reqAtualizado.voucher_aereo_link}">Voucher Aéreo</a></li>` : '',
-        reqAtualizado.voucher_hotel_link  ? `<li><a href="${reqAtualizado.voucher_hotel_link}">Voucher Hospedagem</a></li>` : '',
-        reqAtualizado.voucher_carro_link  ? `<li><a href="${reqAtualizado.voucher_carro_link}">Voucher Carro</a></li>` : '',
-      ].join('');
-      GmailApp.sendEmail(cfg.EMAIL_VIAGENS,
-        `[CONCLUÍDA] Vouchers enviados — ${reqID} — ${reqAtualizado.nome_viajante}`, '',
-        { htmlBody: `<p>A solicitação <strong>${reqID}</strong> foi concluída.<br>
-           Viajante: <strong>${reqAtualizado.nome_viajante}</strong> → ${reqAtualizado.destino_cidade}<br>
-           Agência: <strong>${reqAtualizado.agencia_vencedora || '—'}</strong></p>
-           <ul>${links}</ul>`,
-          name: 'Sistema de Viagens Magalu' });
+    // Guard: já foi concluído por chamada concorrente — não duplicar notificações
+    if (reqAtualizado.concluido_em) {
+      Logger.log(`[VOUCHER] ${reqID} já concluído em ${reqAtualizado.concluido_em} — ignorando duplicata`);
+      return;
     }
-  }
+
+    const pendente = tipos.some(t => {
+      if (t === 'Aereo'      && !reqAtualizado.voucher_aereo_link)  return true;
+      if (t === 'Hospedagem' && !reqAtualizado.voucher_hotel_link) return true;
+      if (t === 'Carro'      && !reqAtualizado.voucher_carro_link) return true;
+      return false;
+    });
+
+    if (!pendente) {
+      atualizarStatusSolicitacao(reqID, 'Concluída');
+      atualizarCampoSolicitacao(reqID, 'concluido_em', new Date());
+      notificarViajanteSolicitacaoAprovada(reqAtualizado, reqAtualizado.agencia_vencedora);
+      enviarVouchersAoViajante(reqAtualizado);
+      // Notifica também o setor de viagens com cópia dos vouchers
+      const cfg = getConfig();
+      if (cfg.EMAIL_VIAGENS) {
+        const links = [
+          reqAtualizado.voucher_aereo_link  ? `<li><a href="${reqAtualizado.voucher_aereo_link}">Voucher Aéreo</a></li>` : '',
+          reqAtualizado.voucher_hotel_link  ? `<li><a href="${reqAtualizado.voucher_hotel_link}">Voucher Hospedagem</a></li>` : '',
+          reqAtualizado.voucher_carro_link  ? `<li><a href="${reqAtualizado.voucher_carro_link}">Voucher Carro</a></li>` : '',
+        ].join('');
+        GmailApp.sendEmail(cfg.EMAIL_VIAGENS,
+          `[CONCLUÍDA] Vouchers enviados — ${reqID} — ${reqAtualizado.nome_viajante}`, '',
+          { htmlBody: `<p>A solicitação <strong>${reqID}</strong> foi concluída.<br>
+             Viajante: <strong>${reqAtualizado.nome_viajante}</strong> → ${reqAtualizado.destino_cidade}<br>
+             Agência: <strong>${reqAtualizado.agencia_vencedora || '—'}</strong></p>
+             <ul>${links}</ul>`,
+            name: 'Sistema de Viagens Magalu' });
+      }
+    }
+  });
 }
 
 /**

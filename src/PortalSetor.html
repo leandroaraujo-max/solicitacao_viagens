@@ -595,8 +595,16 @@
       di('Criado em',        fmtData(r.criado_em)) +
       '</div></div>';
 
+    // Normaliza tipo_servico para comparação sem sensibilidade a acento
+    // Valores gravados na Sheet: "Aereo", "Rodoviario" (sem acento)
+    var _ts = (r.tipo_servico || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    var temAereo  = _ts.includes('aereo');
+    var temRodov  = _ts.includes('rodoviario') || _ts.includes('rodovi');
+    var temHosp   = _ts.includes('hospedagem');
+    var temCarro  = _ts.includes('carro');
+
     // Aéreo
-    if ((r.tipo_servico || '').includes('Aéreo')) {
+    if (temAereo) {
       body += '<div class="detail-section">' +
         '<div class="detail-section-title">Detalhes GDC / Aéreo</div>' +
         '<div class="detail-grid">' +
@@ -612,38 +620,42 @@
     }
 
     // Rodoviário
-    if ((r.tipo_servico || '').includes('Rodoviário')) {
+    if (temRodov) {
       body += '<div class="detail-section">' +
         '<div class="detail-section-title">Detalhes Rodoviário</div>' +
         '<div class="detail-grid">' +
-        di('Ida Pref.', fmtData(r.rodov_data_ida)) +
-        di('Volta Pref.', fmtData(r.rodov_data_volta)) +
+        di('Ida', fmtData(r.rodov_data_ida)) +
+        di('Volta', fmtData(r.rodov_data_volta)) +
         di('Período', r.rodov_periodo_preferido) +
+        di('Tipo Ônibus', r.rodov_tipo_onibus) +
         di('Elegibilidade Aéreo', r.aereo_elegivel) +
         di('Distância Rota', r.distancia_km ? r.distancia_km + ' km' : '') +
-        di('Tipo Ônibus', r.rodov_tipo_onibus) +
         '</div></div>';
     }
 
     // Hospedagem
-    if ((r.tipo_servico || '').includes('Hospedagem')) {
+    if (temHosp) {
       body += '<div class="detail-section">' +
         '<div class="detail-section-title">Detalhes Hospedagem</div>' +
         '<div class="detail-grid">' +
         di('Quarto Solicitado', r.quarto_tipo_solicitado) +
         di('Preferência Nome', r.preferencia_hotel_nome) +
-        di('Estrelas Pref.', r.preferencia_hotel_estrelas) +
         '</div></div>';
     }
 
     // Carro
-    if ((r.tipo_servico || '').includes('Carro')) {
+    if (temCarro) {
+      var retirada  = (r.carro_cidade_retirada  || '') + (r.carro_hora_retirada  ? ' às ' + r.carro_hora_retirada  : '');
+      var devolucao = (r.carro_cidade_devolucao || '') + (r.carro_hora_devolucao ? ' às ' + r.carro_hora_devolucao : '');
       body += '<div class="detail-section">' +
         '<div class="detail-section-title">Detalhes Carro</div>' +
         '<div class="detail-grid">' +
         di('Tipo Solicitado', r.veiculo_tipo_solicitado) +
-        di('Retirada', (r.carro_cidade_retirada||'') + (r.carro_hora_retirada ? ' às ' + r.carro_hora_retirada : '')) +
-        di('Devolução', (r.carro_cidade_devolucao||'') + (r.carro_hora_devolucao ? ' às ' + r.carro_hora_devolucao : '')) +
+        di('Retirada', retirada) +
+        di('Devolução', devolucao) +
+        ((!retirada && !devolucao && !r.veiculo_tipo_solicitado)
+          ? '<div class="detail-item" style="grid-column:1/-1;color:#999;font-size:12px">Detalhes não informados na solicitação</div>'
+          : '') +
         '</div></div>';
     }
 
