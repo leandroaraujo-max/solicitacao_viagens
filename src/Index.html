@@ -167,6 +167,10 @@
     </div>
 
     <div id="alertaAntecedencia" class="alert hidden"></div>
+    <!-- F2.4: banner de urgência para qualquer viagem com < 15 dias de antecedência -->
+    <div id="alertaUrgencia" class="hidden" style="background:#fff3e0;border-left:4px solid #ff9800;padding:12px 16px;border-radius:6px;font-size:13px;color:#555;margin-top:8px">
+      ⚠ <strong>Viagem com menos de 15 dias de antecedência.</strong> Todas as aprovações serão tratadas com urgência. Para voos, será necessário anexar autorização da diretoria.
+    </div>
     <div id="badgeClassificacao" class="badge hidden"></div>
     <div id="badgeDistancia" class="badge hidden"></div>
 
@@ -227,11 +231,11 @@
       <!-- L3-C: datas sem hora — período preferido é suficiente para cotação -->
       <div class="grid-2">
         <div class="field-group">
-          <label>Data de partida <span class="req">*</span></label>
+          <label>Data de ida <span class="req">*</span></label>
           <input type="date" id="rodovIda" />
         </div>
         <div class="field-group">
-          <label>Data de retorno</label>
+          <label>Data de volta</label>
           <input type="date" id="rodovVolta" />
         </div>
       </div>
@@ -935,9 +939,14 @@ function calcularAntecedencia() {
     badge.classList.add('badge-emergencial');
     alerta.textContent = `Antecedência: ${dias} dias — viagem emergencial requer aprovação adicional.`;
     alerta.classList.remove('hidden');
+    // F2.4: exibe banner de urgência para qualquer serviço
+    const bannerUrgencia = document.getElementById('alertaUrgencia');
+    if (bannerUrgencia) bannerUrgencia.classList.remove('hidden');
   } else {
     badge.textContent = `✅ Aéreo Comum — ${dias} dias de antecedência`;
     badge.classList.add('badge-comum');
+    const bannerUrgencia = document.getElementById('alertaUrgencia');
+    if (bannerUrgencia) bannerUrgencia.classList.add('hidden');
   }
   // Tenta calcular distância automaticamente
   tentarCalcularDistancia();
@@ -1404,6 +1413,18 @@ function setErro(id, msg) {
   el.textContent = '❌ ' + msg;
   el.classList.remove('hidden');
   el.classList.add('erro');
+  // F2.1: limpa o erro automaticamente quando o campo-pai recebe nova entrada
+  const fieldGroup = el.closest ? el.closest('.field-group') : null;
+  if (fieldGroup) {
+    const inputs = fieldGroup.querySelectorAll('input, select, textarea');
+    const limpar = function() {
+      el.textContent = '';
+      el.classList.add('hidden');
+      el.classList.remove('erro');
+      inputs.forEach(function(i) { i.removeEventListener('input', limpar); i.removeEventListener('change', limpar); });
+    };
+    inputs.forEach(function(i) { i.addEventListener('input', limpar); i.addEventListener('change', limpar); });
+  }
 }
 
 function alertar(msg) { alert(msg); }

@@ -284,7 +284,7 @@
           <select id="filtroStatus">
             <option value="">Todos</option>
             <option value="Pendente Aprovação Liderança">Pendente Liderança</option>
-            <option value="Pendente Pré-Aprovação Setor">Pendente Pré-Aprova Setor</option>
+            <option value="Pendente Pré-Aprovação Setor">Pré-Aprovação Setor</option>
             <option value="Aguardando Cotação">Aguardando Cotação</option>
             <option value="Cotação Parcial">Cotação Parcial</option>
             <option value="Pendente Aprovação Setor">Pendente Aprovação Setor</option>
@@ -396,6 +396,17 @@
   }
 
   function badgeStatus(status) {
+    // F2.2: rótulos simplificados — remove redundância "Pendente" onde o contexto já é claro
+    const statusLabel = {
+      'Pendente Aprovação Liderança':  'Aprovação Liderança',
+      'Pendente Pré-Aprovação Setor':  'Pré-Aprovação Setor',
+      'Aguardando Cotação':            'Aguardando Cotação',
+      'Cotação Parcial':               'Cotação Parcial',
+      'Pendente Aprovação Setor':      'Aprovação Setor',
+      'Aprovada / Aguardando Voucher': 'Aprovada / Ag. Voucher',
+      'Concluída':                     'Concluída',
+      'Reprovada':                     'Reprovada',
+    };
     const map = {
       'Pendente Aprovação Liderança':    'badge-pendente-lideranca',
       'Pendente Pré-Aprovação Setor':    'badge-pendente-setor',
@@ -406,8 +417,9 @@
       'Concluída':                       'badge-concluida',
       'Reprovada':                       'badge-reprovada',
     };
-    const cls = map[status] || 'badge-comum';
-    return '<span class="badge ' + cls + '">' + (status || '—') + '</span>';
+    const cls   = map[status] || 'badge-comum';
+    const label = statusLabel[status] || status || '—';
+    return '<span class="badge ' + cls + '">' + label + '</span>';
   }
 
   // ── Tabs ──────────────────────────────────────────────────
