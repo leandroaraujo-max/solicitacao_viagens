@@ -34,7 +34,7 @@ function doGet(e) {
     // Portal da Agência — DEVE vir ANTES de params.token
     // O link da agência contém reqID+tipo=agencia (sem token de aprovação)
     if (params.reqID && params.tipo === 'agencia') {
-      return renderPortalAgencia(params.reqID, params.ag);
+      return renderPortalAgencia(params.reqID, params.ag, params.prestToken || '');
     }
 
     // Aprovação via link de e-mail (token único N1/N2)
@@ -200,6 +200,10 @@ function doPost_proxy(payload) {
     executarAcaoSetor:       () => executarAcaoSetorPortal(payload.reqID, payload.decisao, payload.emailSetor),
     getRequisicao:           () => getRequisicao(payload.reqID),
     reenviarEmailAgencias:   () => reenviarEmailAgencias(payload.reqID),
+    // F3.1: autenticação de prestadores
+    loginPrestador:          () => loginPrestador(payload.cnpj, payload.senha, payload.agencia),
+    cadastrarPrestador:      () => cadastrarPrestador(payload.cnpj, payload.nome, payload.email, payload.senha, payload.agencia),
+    validarSessaoPrestador:  () => validarSessaoPrestador(payload.token),
   };
 
   try {
@@ -347,10 +351,22 @@ function carregarSolicitacaoAgencia(reqID, agencia) {
   throw new Error(`Solicitação ${reqID} não encontrada.`);
 }
 
-function renderPortalAgencia(reqID, agencia) {
+function renderPortalAgencia(reqID, agencia, prestToken) {
+  // F3.1: Valida token de sessão do prestador
+  let sessao = null;
+  if (prestToken) {
+    try { sessao = validarSessaoPrestador(prestToken); } catch(_) {}
+  }
+  // Token válido apenas se a agência bater
+  const tokenValido = sessao && sessao.agencia && agencia &&
+                      sessao.agencia.toLowerCase() === agencia.toLowerCase();
+
   const tmpl = HtmlService.createTemplateFromFile('PortalAgencia');
-  tmpl.reqID   = reqID;
-  tmpl.agencia = agencia;
+  tmpl.reqID      = reqID;
+  tmpl.agencia    = agencia;
+  tmpl.prestToken = tokenValido ? prestToken : '';
+  tmpl.prestNome  = tokenValido ? (sessao.nome || '') : '';
+  tmpl.webAppUrl  = getConfig().WEBAPP_URL || '';
   return tmpl.evaluate()
     .setTitle('Portal do Prestador — Viagens Magalu')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);

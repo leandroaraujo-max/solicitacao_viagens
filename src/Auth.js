@@ -561,3 +561,145 @@ function carregarPerfilUsuario(cpf) {
 
   return viajante;
 }
+
+// ── F3.1: Autenticação de Prestadores (CNPJ + senha) ────────
+
+/**
+ * Cadastra um novo prestador (agência) no sistema.
+ * CNPJ deve estar pré-autorizado nas Script Properties (CNPJ_TASTUR ou CNPJ_KONTRIP).
+ * @param {string} cnpj        — 14 dígitos
+ * @param {string} nome        — nome do contato/responsável
+ * @param {string} email       — e-mail de contato
+ * @param {string} senha       — senha escolhida (≥8 chars)
+ * @param {string} agencia     — 'Tastur' ou 'Kontrip'
+ * @returns {{ ok: true }}
+ */
+function cadastrarPrestador(cnpj, nome, email, senha, agencia) {
+  const cnpjLimpo = String(cnpj || '').replace(/\D/g, '');
+  if (!cnpjLimpo || cnpjLimpo.length !== 14) throw new Error('CNPJ inválido. Informe os 14 dígitos.');
+  if (!nome || !String(nome).trim())          throw new Error('Nome do responsável é obrigatório.');
+  if (!email || !email.includes('@'))         throw new Error('E-mail inválido.');
+  if (!senha || senha.length < 8)             throw new Error('A senha deve ter no mínimo 8 caracteres.');
+  const agNorm = String(agencia || '').toLowerCase();
+  if (agNorm !== 'tastur' && agNorm !== 'kontrip') throw new Error('Agência inválida. Use Tastur ou Kontrip.');
+
+  // Valida CNPJ pré-autorizado via Script Properties
+  const props = PropertiesService.getScriptProperties();
+  const cnpjTastur  = String(props.getProperty('CNPJ_TASTUR')  || '').replace(/\D/g, '');
+  const cnpjKontrip = String(props.getProperty('CNPJ_KONTRIP') || '').replace(/\D/g, '');
+  const cnpjEsperado = agNorm === 'tastur' ? cnpjTastur : cnpjKontrip;
+  if (!cnpjEsperado || cnpjLimpo !== cnpjEsperado) {
+    throw new Error('CNPJ não autorizado para a agência ' + agencia + '. Contate o setor de viagens.');
+  }
+
+  const sheet = _getSheetPrestadores();
+  const existente = _buscarPrestadorPorCNPJ(sheet, cnpjLimpo);
+  if (existente && existente.status === 'ativo') {
+    throw new Error('CNPJ já cadastrado e ativo. Faça login ou redefina a senha.');
+  }
+
+  const salt  = _gerarSalt();
+  const hash  = _hashSenha(senha, salt);
+  const agora = new Date();
+
+  if (existente) {
+    _atualizarLinhaPrestador(sheet, existente._rowIndex, {
+      nome: nome, email: email, senha_hash: hash, senha_salt: salt, status: 'ativo',
+    });
+  } else {
+    _comLock(() => sheet.appendRow([
+      cnpjLimpo, nome, email.toLowerCase().trim(), hash, salt,
+      agNorm === 'tastur' ? 'Tastur' : 'Kontrip',
+      'ativo', agora, '',
+    ]));
+  }
+  Logger.log('[PREST] Prestador cadastrado: CNPJ ' + cnpjLimpo + ' (' + agencia + ')');
+  return { ok: true };
+}
+
+/**
+ * Autentica prestador por CNPJ + senha. Retorna token de sessão (TTL 8h).
+ * @param {string} cnpj
+ * @param {string} senha
+ * @param {string} agencia  — 'Tastur' ou 'Kontrip' (validação adicional)
+ * @returns {{ token: string, nome: string, agencia: string }}
+ */
+function loginPrestador(cnpj, senha, agencia) {
+  const cnpjLimpo = String(cnpj || '').replace(/\D/g, '');
+  if (!cnpjLimpo || cnpjLimpo.length !== 14) throw new Error('CNPJ inválido.');
+  if (!senha) throw new Error('Senha obrigatória.');
+
+  const sheet = _getSheetPrestadores();
+  const prest = _buscarPrestadorPorCNPJ(sheet, cnpjLimpo);
+  if (!prest) throw new Error('CNPJ não cadastrado. Faça o cadastro primeiro.');
+  if (prest.status !== 'ativo') throw new Error('Conta desativada. Contate o setor de viagens.');
+
+  // Valida agência informada vs agência cadastrada
+  const agNorm = String(agencia || '').toLowerCase();
+  if (agNorm && prest.agencia && prest.agencia.toLowerCase() !== agNorm) {
+    throw new Error('CNPJ não corresponde à agência ' + agencia + '.');
+  }
+
+  const hash = _hashSenha(senha, prest.senha_salt);
+  if (hash !== prest.senha_hash) throw new Error('Senha incorreta.');
+
+  const token = Utilities.getUuid();
+  CacheService.getScriptCache().put(
+    'prest_' + token,
+    JSON.stringify({ cnpj: cnpjLimpo, nome: prest.nome || '', email: prest.email || '', agencia: prest.agencia || '' }),
+    8 * 60 * 60
+  );
+
+  _atualizarLinhaPrestador(sheet, prest._rowIndex, { ultimo_acesso: new Date() });
+  Logger.log('[PREST] Login: CNPJ ' + cnpjLimpo);
+  return { token: token, nome: prest.nome || '', agencia: prest.agencia || '' };
+}
+
+/**
+ * Valida token de sessão de prestador.
+ * @param {string} token
+ * @returns {{ cnpj, nome, email, agencia }|null}
+ */
+function validarSessaoPrestador(token) {
+  if (!token) return null;
+  const raw = CacheService.getScriptCache().get('prest_' + token);
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch(_) { return null; }
+}
+
+// ── Helpers privados de Prestadores ─────────────────────────
+
+function _getSheetPrestadores() {
+  const cfg   = getConfig();
+  const ss    = SpreadsheetApp.openById(cfg.SHEET_ID);
+  let   sheet = ss.getSheetByName('Prestadores');
+  if (!sheet) {
+    sheet = ss.insertSheet('Prestadores');
+    sheet.appendRow(['cnpj','nome','email','senha_hash','senha_salt','agencia','status','criado_em','ultimo_acesso']);
+  }
+  return sheet;
+}
+
+function _buscarPrestadorPorCNPJ(sheet, cnpj) {
+  const dados = sheet.getDataRange().getValues();
+  const h     = dados[0];
+  const iCnpj = h.indexOf('cnpj');
+  for (let i = 1; i < dados.length; i++) {
+    if (String(dados[i][iCnpj]).replace(/\D/g,'') === String(cnpj).replace(/\D/g,'')) {
+      const obj = {};
+      h.forEach(function(col, j) { obj[col] = dados[i][j]; });
+      obj._rowIndex = i + 1;
+      return obj;
+    }
+  }
+  return null;
+}
+
+function _atualizarLinhaPrestador(sheet, rowIndex, campos) {
+  const dados = sheet.getDataRange().getValues();
+  const h     = dados[0];
+  Object.entries(campos).forEach(function([col, val]) {
+    const idx = h.indexOf(col);
+    if (idx >= 0) sheet.getRange(rowIndex, idx + 1).setValue(val);
+  });
+}

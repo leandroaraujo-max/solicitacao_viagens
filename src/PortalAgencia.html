@@ -17,6 +17,76 @@
 
 <main class="container">
 
+  <!-- F3.1: Tela de login — exibida quando PREST_TOKEN está vazio -->
+  <div id="telaLogin" class="card hidden" style="max-width:420px;margin:40px auto">
+    <div style="text-align:center;margin-bottom:20px">
+      <h2 style="font-size:18px;color:#0086FF;margin:0 0 4px">Acesso do Prestador</h2>
+      <p style="font-size:13px;color:#777;margin:0">Agência: <strong><?= agencia ?></strong></p>
+    </div>
+    <!-- Abas Login / Cadastro -->
+    <div style="display:flex;border-bottom:2px solid #eee;margin-bottom:16px">
+      <button id="btnAbaLogin" onclick="trocarAbaLogin('login')"
+        style="flex:1;padding:10px;border:none;background:none;cursor:pointer;font-size:14px;font-weight:600;color:#0086FF;border-bottom:3px solid #0086FF;margin-bottom:-2px">
+        Entrar
+      </button>
+      <button id="btnAbaCadastro" onclick="trocarAbaLogin('cadastro')"
+        style="flex:1;padding:10px;border:none;background:none;cursor:pointer;font-size:14px;color:#888">
+        Primeiro acesso
+      </button>
+    </div>
+    <!-- Painel Login -->
+    <div id="paineLogin">
+      <div class="field-group">
+        <label>CNPJ da Agência <span class="req">*</span></label>
+        <input type="text" id="loginCnpj" placeholder="00.000.000/0001-00" maxlength="18" style="width:100%">
+      </div>
+      <div class="field-group">
+        <label>Senha <span class="req">*</span></label>
+        <input type="password" id="loginSenha" placeholder="••••••••" style="width:100%"
+          onkeydown="if(event.key==='Enter') efetuarLogin()">
+      </div>
+      <p id="loginMsg" style="color:#c62828;font-size:13px;min-height:18px"></p>
+      <button id="btnLogin" onclick="efetuarLogin()"
+        style="width:100%;padding:12px;background:#0086FF;color:#fff;border:none;border-radius:6px;font-size:15px;font-weight:600;cursor:pointer">
+        Entrar
+      </button>
+    </div>
+    <!-- Painel Cadastro -->
+    <div id="paineCadastro" class="hidden">
+      <div class="field-group">
+        <label>CNPJ da Agência <span class="req">*</span></label>
+        <input type="text" id="cadCnpj" placeholder="00.000.000/0001-00" maxlength="18" style="width:100%">
+      </div>
+      <div class="field-group">
+        <label>Nome do Responsável <span class="req">*</span></label>
+        <input type="text" id="cadNome" placeholder="Nome completo" style="width:100%">
+      </div>
+      <div class="field-group">
+        <label>E-mail de Contato <span class="req">*</span></label>
+        <input type="email" id="cadEmail" placeholder="contato@agencia.com.br" style="width:100%">
+      </div>
+      <div class="field-group">
+        <label>Senha <span class="req">*</span></label>
+        <input type="password" id="cadSenha" placeholder="Mínimo 8 caracteres" style="width:100%">
+      </div>
+      <div class="field-group">
+        <label>Confirmar Senha <span class="req">*</span></label>
+        <input type="password" id="cadConf" placeholder="Repita a senha" style="width:100%"
+          onkeydown="if(event.key==='Enter') efetuarCadastro()">
+      </div>
+      <p style="font-size:12px;color:#888;margin:0 0 8px">O CNPJ deve estar pré-autorizado pelo setor de viagens Magalu.</p>
+      <p id="cadastroMsg" style="color:#c62828;font-size:13px;min-height:18px"></p>
+      <button id="btnCadastro" onclick="efetuarCadastro()"
+        style="width:100%;padding:12px;background:#0086FF;color:#fff;border:none;border-radius:6px;font-size:15px;font-weight:600;cursor:pointer">
+        Cadastrar
+      </button>
+    </div>
+  </div>
+
+  <!-- Conteúdo do portal — oculto até autenticação válida -->
+  <div id="conteudoPortal">
+    <p id="lblPrestNome" style="text-align:right;font-size:13px;color:#555;margin:0 0 8px"></p>
+
   <!-- Cabeçalho da solicitação (read-only) -->
   <div class="card">
     <h2 class="card-title">Solicitação — <span id="lblReqID"><?= reqID ?></span></h2>
@@ -357,15 +427,33 @@
     </div>
   </div>
 
+  </div><!-- /conteudoPortal -->
+
 </main>
 
 <script>
-const REQ_ID  = '<?= reqID ?>';
-const AGENCIA = '<?= agencia ?>';
+const REQ_ID     = '<?= reqID ?>';
+const AGENCIA    = '<?= agencia ?>';
+const PREST_TOKEN = '<?= prestToken ?>';
+const PREST_NOME  = '<?= prestNome ?>';
+const WEBAPP_URL  = '<?= webAppUrl ?>';
 let solicitacao = null;
 
-// ── Inicialização ─────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => carregarSolicitacao());
+// ── F3.1: Controle de autenticação ───────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  if (!PREST_TOKEN) {
+    // Sem token válido → mostra tela de login, oculta portal
+    document.getElementById('telaLogin').classList.remove('hidden');
+    document.getElementById('conteudoPortal').classList.add('hidden');
+  } else {
+    // Token OK → mostra boas-vindas e carrega solicitação
+    document.getElementById('telaLogin').classList.add('hidden');
+    document.getElementById('conteudoPortal').classList.remove('hidden');
+    const nb = document.getElementById('lblPrestNome');
+    if (nb) nb.textContent = PREST_NOME ? ' — Olá, ' + PREST_NOME : '';
+    carregarSolicitacao();
+  }
+});
 
 function carregarSolicitacao() {
   google.script.run
@@ -851,6 +939,66 @@ function formatData(str) {
   if (!str) return '-';
   const d = new Date(str);
   return d.toLocaleDateString('pt-BR');
+}
+
+// ── F3.1: Login / Cadastro de Prestador ─────────────────────
+let _abaLogin = 'login'; // 'login' | 'cadastro'
+function trocarAbaLogin(aba) {
+  _abaLogin = aba;
+  document.getElementById('paineLogin').classList.toggle('hidden', aba !== 'login');
+  document.getElementById('paineCadastro').classList.toggle('hidden', aba !== 'cadastro');
+  document.getElementById('btnAbaLogin').classList.toggle('tab-ativa', aba === 'login');
+  document.getElementById('btnAbaCadastro').classList.toggle('tab-ativa', aba === 'cadastro');
+}
+
+function efetuarLogin() {
+  const cnpj  = document.getElementById('loginCnpj').value.trim();
+  const senha = document.getElementById('loginSenha').value;
+  const msg   = document.getElementById('loginMsg');
+  msg.textContent = '';
+  if (!cnpj || !senha) { msg.textContent = 'Preencha CNPJ e senha.'; return; }
+  const btn = document.getElementById('btnLogin');
+  btn.disabled = true; btn.textContent = 'Aguarde...';
+  google.script.run
+    .withSuccessHandler(function(r) {
+      btn.disabled = false; btn.textContent = 'Entrar';
+      if (!r || !r.sucesso) { msg.textContent = r && r.erro ? r.erro : 'Erro ao autenticar.'; return; }
+      const dados = r.dados;
+      // Redireciona com prestToken na URL da WebApp
+      window.location.href = WEBAPP_URL + '?reqID=' + REQ_ID + '&tipo=agencia&ag=' + AGENCIA + '&prestToken=' + dados.token;
+    })
+    .withFailureHandler(function(e) {
+      btn.disabled = false; btn.textContent = 'Entrar';
+      msg.textContent = 'Falha de comunicação: ' + e.message;
+    })
+    .doPost_proxy({ acao: 'loginPrestador', cnpj: cnpj, senha: senha, agencia: AGENCIA });
+}
+
+function efetuarCadastro() {
+  const cnpj  = document.getElementById('cadCnpj').value.trim();
+  const nome  = document.getElementById('cadNome').value.trim();
+  const email = document.getElementById('cadEmail').value.trim();
+  const senha = document.getElementById('cadSenha').value;
+  const conf  = document.getElementById('cadConf').value;
+  const msg   = document.getElementById('cadastroMsg');
+  msg.textContent = '';
+  if (!cnpj || !nome || !email || !senha) { msg.textContent = 'Preencha todos os campos.'; return; }
+  if (senha !== conf) { msg.textContent = 'As senhas não conferem.'; return; }
+  const btn = document.getElementById('btnCadastro');
+  btn.disabled = true; btn.textContent = 'Aguarde...';
+  google.script.run
+    .withSuccessHandler(function(r) {
+      btn.disabled = false; btn.textContent = 'Cadastrar';
+      if (!r || !r.sucesso) { msg.textContent = r && r.erro ? r.erro : 'Erro ao cadastrar.'; return; }
+      msg.style.color = '#2e7d32';
+      msg.textContent = 'Cadastro realizado! Faça login.';
+      trocarAbaLogin('login');
+    })
+    .withFailureHandler(function(e) {
+      btn.disabled = false; btn.textContent = 'Cadastrar';
+      msg.textContent = 'Falha de comunicação: ' + e.message;
+    })
+    .doPost_proxy({ acao: 'cadastrarPrestador', cnpj: cnpj, nome: nome, email: email, senha: senha, agencia: AGENCIA });
 }
 </script>
 </body>
