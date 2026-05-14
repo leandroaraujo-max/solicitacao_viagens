@@ -408,3 +408,137 @@ function atualizarExcecaoSolicitacao(reqID, dados) {
   atualizarCampoSolicitacao(reqID, 'excecao_laudo_upload_em', new Date());
   atualizarCampoSolicitacao(reqID, 'excecao_status_rh',     'Pendente');
 }
+
+// ── F3.5: Gerador de PDF padronizado de resumo de viagem ─────
+
+/**
+ * Gera PDF de resumo da viagem (cotação aprovada) e salva no Drive.
+ * Chamado após AprovaTastur/AprovaKontrip em concluirAprovacao.
+ * @param {string} reqID
+ * @param {Object} req — objeto da solicitação (linha da Sheet)
+ * @param {string} agencia — 'Tastur' ou 'Kontrip'
+ * @returns {string} URL pública do PDF no Drive, ou '' em caso de falha.
+ */
+function gerarPdfResumoViagem(reqID, req, agencia) {
+  try {
+    const cfg       = getConfig();
+    const pref      = 'cotacao_' + agencia.toLowerCase() + '_';
+    const fmtData   = function(d) {
+      if (!d) return '—';
+      try { return Utilities.formatDate(new Date(d), 'America/Sao_Paulo', 'dd/MM/yyyy HH:mm'); } catch(e) { return String(d); }
+    };
+    const fmtMoeda  = function(v) {
+      const n = parseFloat(v || 0);
+      return isNaN(n) ? '—' : 'R$ ' + n.toFixed(2).replace('.', ',').replace(/(\d)(?=(\d{3})+,)/g, '$1.');
+    };
+
+    const servicos = String(req.tipo_servico || '').split(',').map(function(s) { return s.trim(); });
+
+    // Monta linhas de cotação da agência selecionada
+    const linhas = [];
+
+    if (servicos.indexOf('Aereo') >= 0 && req[pref + 'aero_valor']) {
+      linhas.push(
+        '<tr><td colspan="2" style="background:#e3f2fd;font-weight:bold;padding:8px">✈ Aéreo</td></tr>',
+        '<tr><td>Companhia / Voo</td><td>' + (req[pref+'aero_cia']||'—') + ' ' + (req[pref+'aero_voo']||'') + '</td></tr>',
+        '<tr><td>Origem → Destino</td><td>' + (req[pref+'aero_origem']||'—') + ' → ' + (req[pref+'aero_destino']||'—') + '</td></tr>',
+        '<tr><td>Saída / Chegada</td><td>' + fmtData(req[pref+'aero_saida']) + ' / ' + fmtData(req[pref+'aero_chegada']) + '</td></tr>',
+        '<tr><td>Classe / Tarifa</td><td>' + (req[pref+'aero_classe']||'—') + '</td></tr>',
+        '<tr><td>Bagagem despachada</td><td>' + (req[pref+'aero_bagagem'] ? 'Sim' : 'Não') + '</td></tr>',
+        '<tr><td style="font-weight:bold">Valor Aéreo</td><td style="font-weight:bold">' + fmtMoeda(req[pref+'aero_valor']) + '</td></tr>'
+      );
+    }
+    if (servicos.indexOf('Hospedagem') >= 0 && req[pref + 'hotel_nome']) {
+      linhas.push(
+        '<tr><td colspan="2" style="background:#fce4ec;font-weight:bold;padding:8px">🏨 Hospedagem</td></tr>',
+        '<tr><td>Hotel</td><td>' + (req[pref+'hotel_nome']||'—') + '</td></tr>',
+        '<tr><td>Endereço</td><td>' + (req[pref+'hotel_endereco']||'—') + '</td></tr>',
+        '<tr><td>Check-in / Check-out</td><td>' + fmtData(req[pref+'hotel_checkin']) + ' / ' + fmtData(req[pref+'hotel_checkout']) + '</td></tr>',
+        '<tr><td>Categoria</td><td>' + (req[pref+'hotel_categoria']||'—') + '</td></tr>',
+        '<tr><td>Regime</td><td>' + (req[pref+'hotel_regime']||'—') + '</td></tr>',
+        '<tr><td style="font-weight:bold">Valor Hospedagem</td><td style="font-weight:bold">' + fmtMoeda(req[pref+'hotel_total']) + '</td></tr>'
+      );
+    }
+    if (servicos.indexOf('Carro') >= 0 && req[pref + 'carro_locadora']) {
+      linhas.push(
+        '<tr><td colspan="2" style="background:#fff3e0;font-weight:bold;padding:8px">🚗 Aluguel de Carro</td></tr>',
+        '<tr><td>Locadora</td><td>' + (req[pref+'carro_locadora']||'—') + '</td></tr>',
+        '<tr><td>Categoria</td><td>' + (req[pref+'carro_categoria']||'—') + '</td></tr>',
+        '<tr><td>Retirada</td><td>' + fmtData(req[pref+'carro_retirada']) + ' — ' + (req[pref+'carro_local']||'') + '</td></tr>',
+        '<tr><td>Devolução</td><td>' + fmtData(req[pref+'carro_devolucao']) + '</td></tr>',
+        '<tr><td>Seguro incluso</td><td>' + (req[pref+'carro_seguro'] ? 'Sim' : 'Não') + '</td></tr>',
+        '<tr><td style="font-weight:bold">Valor Carro</td><td style="font-weight:bold">' + fmtMoeda(req[pref+'carro_valor']) + '</td></tr>'
+      );
+    }
+    if (servicos.indexOf('Rodoviario') >= 0 && req[pref + 'rodov_empresa']) {
+      linhas.push(
+        '<tr><td colspan="2" style="background:#e8f5e9;font-weight:bold;padding:8px">🚌 Rodoviário</td></tr>',
+        '<tr><td>Empresa</td><td>' + (req[pref+'rodov_empresa']||'—') + '</td></tr>',
+        '<tr><td>Origem → Destino</td><td>' + (req[pref+'rodov_origem']||'—') + ' → ' + (req[pref+'rodov_destino']||'—') + '</td></tr>',
+        '<tr><td>Partida / Chegada</td><td>' + fmtData(req[pref+'rodov_partida']) + ' / ' + fmtData(req[pref+'rodov_chegada']) + '</td></tr>',
+        '<tr><td style="font-weight:bold">Valor Rodoviário</td><td style="font-weight:bold">' + fmtMoeda(req[pref+'rodov_valor']) + '</td></tr>'
+      );
+    }
+
+    const valTotal = [
+      parseFloat(req[pref+'aero_valor']  || 0),
+      parseFloat(req[pref+'hotel_total'] || 0),
+      parseFloat(req[pref+'carro_valor'] || 0),
+      parseFloat(req[pref+'rodov_valor'] || 0),
+    ].reduce(function(a,b){ return a+b; }, 0);
+
+    const nomeArq = 'ResumoViagem_' + reqID + '_' + agencia + '.pdf';
+    const emissao = Utilities.formatDate(new Date(), 'America/Sao_Paulo', 'dd/MM/yyyy HH:mm');
+
+    const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>' +
+      'body{font-family:Arial,sans-serif;font-size:13px;color:#222;margin:32px}' +
+      'h1{color:#0086FF;font-size:18px;margin-bottom:4px}' +
+      'h2{font-size:14px;color:#333;border-bottom:2px solid #0086FF;padding-bottom:4px;margin-top:24px}' +
+      'table{width:100%;border-collapse:collapse;margin-bottom:16px}' +
+      'td{padding:6px 8px;border-bottom:1px solid #eee}' +
+      'tr:nth-child(even) td{background:#f9f9f9}' +
+      'td:first-child{color:#555;width:200px}' +
+      '.header{background:#0086FF;color:#fff;padding:16px 20px;border-radius:6px;margin-bottom:24px}' +
+      '.header p{margin:4px 0 0;color:#FFCE00;font-size:12px}' +
+      '.total{background:#e3f2fd;font-weight:bold;font-size:15px}' +
+      '.agencia{display:inline-block;background:#e8f5e9;color:#2e7d32;padding:3px 10px;border-radius:12px;font-weight:bold;font-size:12px}' +
+      '.footer{margin-top:32px;border-top:1px solid #ddd;padding-top:12px;font-size:11px;color:#999}' +
+      '</style></head><body>' +
+      '<div class="header"><h1>Resumo de Viagem Corporativa Aprovada</h1>' +
+      '<p>Protocolo: ' + reqID + '  |  Emitido em: ' + emissao + '  |  Agência: <span style="font-weight:bold">' + agencia + '</span></p></div>' +
+      '<h2>Viajante</h2><table>' +
+      '<tr><td>Nome</td><td><strong>' + (req.nome_viajante||'—') + '</strong></td></tr>' +
+      '<tr><td>CPF</td><td>' + String(req.cpf_viajante||'').replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4') + '</td></tr>' +
+      '<tr><td>E-mail</td><td>' + (req.email_viajante||'—') + '</td></tr>' +
+      '</table>' +
+      '<h2>Dados da Viagem</h2><table>' +
+      '<tr><td>Origem</td><td>' + (req.origem_cidade||'—') + (req.origem_estado ? ' / '+req.origem_estado : '') + '</td></tr>' +
+      '<tr><td>Destino</td><td><strong>' + (req.destino_cidade||'—') + (req.destino_estado ? ' / '+req.destino_estado : '') + '</strong></td></tr>' +
+      '<tr><td>Data de Ida</td><td>' + fmtData(req.data_ida) + '</td></tr>' +
+      '<tr><td>Data de Volta</td><td>' + fmtData(req.data_volta) + '</td></tr>' +
+      '<tr><td>Motivo</td><td>' + (req.motivo_viagem||'—') + '</td></tr>' +
+      '</table>' +
+      (linhas.length ? '<h2>Cotação Aprovada — ' + agencia + '</h2><table>' + linhas.join('') + '</table>' : '') +
+      '<h2>Total</h2><table>' +
+      '<tr class="total"><td>Valor Total Aprovado</td><td>' + fmtMoeda(valTotal) + '</td></tr>' +
+      '</table>' +
+      '<div class="footer">Portal de Viagens Corporativas Magalu  |  Protocolo: ' + reqID + '  |  ' + emissao + '</div>' +
+      '</body></html>';
+
+    // Converte HTML para PDF via Drive API
+    const pdfBlob = _htmlParaPdf(html, nomeArq, null);
+    if (!pdfBlob) {
+      Logger.log('[F3.5] _htmlParaPdf retornou null para ' + reqID);
+      return '';
+    }
+
+    // Salva no Drive (pasta de vouchers)
+    const pasta = DriveApp.getFolderById(cfg.PASTA_VOUCHERS_ID || cfg.PASTA_LAUDOS_ID);
+    const arq   = pasta.createFile(pdfBlob);
+    arq.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    return arq.getUrl();
+  } catch(err) {
+    Logger.log('[F3.5] gerarPdfResumoViagem erro: ' + err.message);
+    return '';
+  }
+}

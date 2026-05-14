@@ -243,6 +243,17 @@ function concluirAprovacao(reqID, req, agencia) {
   notificarAgenciaVencedora(req, agencia);
   notificarAgenciaPerdedora(req, agencia);
   notificarViajanteSolicitacaoAprovada(req, agencia);
+
+  // F3.5: gerar PDF padronizado de resumo da viagem aprovada
+  try {
+    const linkPdf = gerarPdfResumoViagem(reqID, req, agencia);
+    if (linkPdf) {
+      _definirCampoComColuna(reqID, 'resumo_pdf_link', linkPdf);
+      Logger.log('[F3.5] PDF resumo gerado para ' + reqID + ': ' + linkPdf);
+    }
+  } catch(errPdf) {
+    Logger.log('[F3.5] Falha ao gerar PDF resumo (não crítico): ' + errPdf.message);
+  }
 }
 
 function verificarNecessidadeN2(req) {
