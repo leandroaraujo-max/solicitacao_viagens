@@ -171,6 +171,12 @@
     <div id="alertaUrgencia" class="hidden" style="background:#fff3e0;border-left:4px solid #ff9800;padding:12px 16px;border-radius:6px;font-size:13px;color:#555;margin-top:8px">
       ⚠ <strong>Viagem com menos de 15 dias de antecedência.</strong> Todas as aprovações serão tratadas com urgência. Para voos, será necessário anexar autorização da diretoria.
     </div>
+    <!-- F3.4: upload autorização da diretoria (Aéreo emergencial) -->
+    <div id="secaoAutorizacao" class="hidden" style="background:#fff8e1;border-left:4px solid #ffc107;padding:12px 16px;border-radius:6px;margin-top:8px">
+      <label style="font-weight:600;font-size:13px;display:block;margin-bottom:6px">📎 Autorização da Diretoria <span class="req">*</span></label>
+      <p style="font-size:12px;color:#666;margin:0 0 8px">Para voos com menos de 15 dias de antecedência é obrigatório anexar a autorização assinada pela diretoria (PDF, JPG ou PNG).</p>
+      <input type="file" id="inputAutorizacaoDiretoria" accept=".pdf,.jpg,.jpeg,.png" style="font-size:13px">
+    </div>
     <div id="badgeClassificacao" class="badge hidden"></div>
     <div id="badgeDistancia" class="badge hidden"></div>
 
@@ -948,8 +954,23 @@ function calcularAntecedencia() {
     const bannerUrgencia = document.getElementById('alertaUrgencia');
     if (bannerUrgencia) bannerUrgencia.classList.add('hidden');
   }
+  verificarNecessidadeAutorizacao();
   // Tenta calcular distância automaticamente
   tentarCalcularDistancia();
+}
+
+// F3.4: exibe secaoAutorizacao quando Aéreo + < 15 dias
+function verificarNecessidadeAutorizacao() {
+  const dataIda = new Date(document.getElementById('dataIda').value);
+  const agora   = new Date();
+  const dias    = Math.floor((dataIda - agora) / 86400000);
+  const temAereo = [...document.querySelectorAll('input[type=checkbox]:checked')]
+    .some(c => c.value === 'Aereo');
+  const sec = document.getElementById('secaoAutorizacao');
+  if (sec) {
+    const mostrar = !isNaN(dias) && dias >= 0 && dias < 15 && temAereo;
+    sec.classList.toggle('hidden', !mostrar);
+  }
 }
 
 let _distTimer;
@@ -1040,6 +1061,7 @@ function onServicoChange() {
   }
 
   tentarCalcularDistancia();
+  verificarNecessidadeAutorizacao();
 }
 
 // ── Alerta ônibus leito (D2) ─────────────────────────────────
@@ -1167,6 +1189,29 @@ function submeterSolicitacao() {
     ...(estado.preferencia_hotel      || {}),
   };
 
+  // F3.4: verificar autorização da diretoria
+  const secAut   = document.getElementById('secaoAutorizacao');
+  const inputAut = document.getElementById('inputAutorizacaoDiretoria');
+  const precisaAut = secAut && !secAut.classList.contains('hidden');
+  if (precisaAut && (!inputAut || inputAut.files.length === 0)) {
+    return alertar('Para voos com menos de 15 dias é obrigatório anexar a autorização da diretoria.');
+  }
+
+  if (precisaAut && inputAut && inputAut.files.length > 0) {
+    const file = inputAut.files[0];
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+      payload.autorizacaoDiretoriaBase64 = ev.target.result.split(',')[1];
+      payload.autorizacaoDiretoriaNome   = file.name;
+      _enviarPayloadSolicitacao(payload);
+    };
+    reader.readAsDataURL(file);
+  } else {
+    _enviarPayloadSolicitacao(payload);
+  }
+}
+
+function _enviarPayloadSolicitacao(payload) {
   setBtn('btnSubmeter', true, 'Enviar solicitação ✓');
   runServer(
     payload,

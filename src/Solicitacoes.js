@@ -163,6 +163,24 @@ function submeterSolicitacao(payload) {
     }
   }
 
+  // 12. F3.4: Salva autorização da diretoria (voo emergencial)
+  if (payload.autorizacaoDiretoriaBase64 && payload.autorizacaoDiretoriaNome) {
+    try {
+      const cfg2   = getConfig();
+      const ext    = payload.autorizacaoDiretoriaNome.split('.').pop().toLowerCase();
+      const mime   = ext === 'pdf' ? 'application/pdf'
+                   : (ext === 'png' ? 'image/png' : 'image/jpeg');
+      const nome   = `AutorizacaoDiretoria_${reqID}_${Utilities.formatDate(new Date(), 'America/Sao_Paulo', 'yyyyMMdd_HHmm')}.${ext}`;
+      const blob   = Utilities.newBlob(Utilities.base64Decode(payload.autorizacaoDiretoriaBase64), mime, nome);
+      const pasta  = DriveApp.getFolderById(cfg2.PASTA_VOUCHERS_ID || cfg2.PASTA_LAUDOS_ID);
+      const arq    = pasta.createFile(blob);
+      arq.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      _definirCampoComColuna(reqID, 'autorizacao_diretoria_link', arq.getUrl());
+    } catch (errAut) {
+      Logger.log('[submeterSolicitacao] Erro ao salvar autorização diretoria: ' + errAut.message);
+    }
+  }
+
   return { reqID, status: 'Pendente Aprovação Liderança', classificacao, antecedenciaDias };
 }
 
@@ -199,6 +217,32 @@ function validarCadeiaAprovacao(cadeia, matricula) {
 }
 
 // ── Utilitários ──────────────────────────────────────────────
+
+/**
+ * F3.4: Define um campo na linha da Sheet, criando o cabeçalho se ainda não existir.
+ */
+function _definirCampoComColuna(reqID, campo, valor) {
+  const cfg    = getConfig();
+  const sheet  = SpreadsheetApp.openById(cfg.SHEET_ID).getSheetByName('Solicitacoes');
+  const dados  = sheet.getDataRange().getValues();
+  const h      = dados[0];
+  const idxReq = h.indexOf('req_id');
+  let   idx    = h.indexOf(campo);
+
+  if (idx < 0) {
+    // Adiciona cabeçalho na última coluna vazia
+    idx = h.length;
+    sheet.getRange(1, idx + 1).setValue(campo);
+  }
+
+  for (let i = 1; i < dados.length; i++) {
+    if (String(dados[i][idxReq]) === String(reqID)) {
+      sheet.getRange(i + 1, idx + 1).setValue(valor);
+      break;
+    }
+  }
+}
+
 function gerarReqID() {
   const ano  = new Date().getFullYear();
   const seq  = Math.floor(Math.random() * 9000) + 1000;
