@@ -88,11 +88,17 @@
       <div class="grid-2">
         <div class="field-group">
           <label>Aeroporto Origem (IATA) <span class="req">*</span></label>
-          <input type="text" id="aeroOrigem" placeholder="Ex: CGH" maxlength="3" style="text-transform:uppercase" />
+          <div style="position:relative">
+            <input type="text" id="aeroOrigem" placeholder="Ex: CGH ou São Paulo" maxlength="50" style="text-transform:uppercase;width:100%" oninput="buscarAeroporto('aeroOrigem',this.value)" onblur="fecharSugestoes('aeroOrigem')" autocomplete="off" />
+            <div id="aeroOrigemSugestoes" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;background:#fff;border:1px solid #ccc;border-top:none;border-radius:0 0 6px 6px;max-height:180px;overflow-y:auto"></div>
+          </div>
         </div>
         <div class="field-group">
           <label>Aeroporto Destino (IATA) <span class="req">*</span></label>
-          <input type="text" id="aeroDestino" placeholder="Ex: POA" maxlength="3" style="text-transform:uppercase" />
+          <div style="position:relative">
+            <input type="text" id="aeroDestino" placeholder="Ex: POA ou Porto Alegre" maxlength="50" style="text-transform:uppercase;width:100%" oninput="buscarAeroporto('aeroDestino',this.value)" onblur="fecharSugestoes('aeroDestino')" autocomplete="off" />
+            <div id="aeroDestinoSugestoes" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;background:#fff;border:1px solid #ccc;border-top:none;border-radius:0 0 6px 6px;max-height:180px;overflow-y:auto"></div>
+          </div>
         </div>
       </div>
       <div class="grid-2">
@@ -232,16 +238,26 @@
       <div class="grid-2">
         <div class="field-group">
           <label>Retirada <span class="req">*</span></label>
-          <input type="datetime-local" id="carroRetirada" />
+          <input type="datetime-local" id="carroRetirada" onchange="calcularAluguel()" />
         </div>
         <div class="field-group">
           <label>Devolução <span class="req">*</span></label>
-          <input type="datetime-local" id="carroDevolucao" />
+          <input type="datetime-local" id="carroDevolucao" onchange="calcularAluguel()" />
         </div>
       </div>
       <div class="field-group">
         <label>Local de Retirada</label>
         <input type="text" id="carroLocal" placeholder="Ex: Aeroporto Salgado Filho — Balcão T1" />
+      </div>
+      <div class="grid-2">
+        <div class="field-group">
+          <label>Valor por dia (R$) <span class="req">*</span></label>
+          <input type="number" id="carroDiaria" step="0.01" min="0" placeholder="0,00" onchange="calcularAluguel()" />
+        </div>
+        <div class="field-group">
+          <label>Nº de dias</label>
+          <input type="number" id="carroNDias" readonly placeholder="—" style="background:#f5f5f5;cursor:default" />
+        </div>
       </div>
       <div class="grid-2">
         <div class="field-group">
@@ -252,8 +268,8 @@
           </div>
         </div>
         <div class="field-group">
-          <label>Valor Total (R$) <span class="req">*</span></label>
-          <input type="number" id="carroValor" step="0.01" min="0" placeholder="0,00" />
+          <label>Valor Total (R$)</label>
+          <input type="number" id="carroValor" step="0.01" min="0" placeholder="0,00" readonly style="background:#f5f5f5;cursor:default" />
         </div>
       </div>
     </div>
@@ -583,6 +599,50 @@ function calcularDiarias() {
     document.getElementById('hotelNDiarias').value = dias;
     document.getElementById('hotelTotal').value    = (dias * val).toFixed(2);
   }
+}
+
+function calcularAluguel() {
+  const ret = new Date(document.getElementById('carroRetirada').value);
+  const dev = new Date(document.getElementById('carroDevolucao').value);
+  const diaria = parseFloat(document.getElementById('carroDiaria').value) || 0;
+  if (!isNaN(ret) && !isNaN(dev) && dev > ret) {
+    const dias = Math.ceil((dev - ret) / 86400000);
+    document.getElementById('carroNDias').value  = dias;
+    document.getElementById('carroValor').value  = (dias * diaria).toFixed(2);
+  }
+}
+
+const _aeroDebounce = {};
+function buscarAeroporto(fieldId, val) {
+  clearTimeout(_aeroDebounce[fieldId]);
+  const sug = document.getElementById(fieldId + 'Sugestoes');
+  if (!sug) return;
+  if (!val || val.length < 2) { sug.style.display = 'none'; return; }
+  _aeroDebounce[fieldId] = setTimeout(function() {
+    google.script.run
+      .withSuccessHandler(function(r) {
+        if (!r || !r.length) { sug.style.display = 'none'; return; }
+        sug.innerHTML = r.slice(0, 8).map(function(item) {
+          const nome = (item.name || (item.address && item.address.cityName) || item.iataCode || '');
+          return '<div onmousedown="selecionarAeroporto(\'' + fieldId + '\',\'' + item.iataCode + '\',\'' + nome.replace(/'/g,'') + '\')" style="padding:8px 10px;cursor:pointer;font-size:13px;border-bottom:1px solid #f0f0f0;background:#fff" onmouseover="this.style.background=\'#f0f4ff\'" onmouseout="this.style.background=\'#fff\'"><strong>' + item.iataCode + '</strong> — ' + nome + '</div>';
+        }).join('');
+        sug.style.display = 'block';
+      })
+      .withFailureHandler(function() { sug.style.display = 'none'; })
+      .doPost_proxy({ acao: 'buscarLocaisAmadeus', termo: val.toLowerCase() });
+  }, 400);
+}
+function selecionarAeroporto(fieldId, iata, nome) {
+  const el = document.getElementById(fieldId);
+  if (el) { el.value = iata; }
+  const sug = document.getElementById(fieldId + 'Sugestoes');
+  if (sug) sug.style.display = 'none';
+}
+function fecharSugestoes(fieldId) {
+  setTimeout(function() {
+    const sug = document.getElementById(fieldId + 'Sugestoes');
+    if (sug) sug.style.display = 'none';
+  }, 200);
 }
 
 function toggleConexao(tem) {

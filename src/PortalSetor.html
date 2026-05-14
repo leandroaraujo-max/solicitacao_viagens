@@ -699,6 +699,7 @@
           cl('Hospedagem', fmtBRL(r.cotacao_tastur_hotel_total)) +
           cl('Carro', fmtBRL(r.cotacao_tastur_carro_valor)) +
           '<div class="cotacao-total">Total: ' + (totTastur ? fmtBRL(totTastur) : '—') + '</div>' +
+          (extrairUrlPdf(r.cotacao_tastur_obs) ? '<a href="' + extrairUrlPdf(r.cotacao_tastur_obs) + '" target="_blank" style="display:inline-block;margin-top:6px;font-size:12px;color:#0086FF">📄 Ver PDF</a>' : '') +
           '</div>';
       } else {
         body += '<div class="cotacao-box"><div class="cotacao-nome">Tastur</div>' +
@@ -712,6 +713,7 @@
           cl('Hospedagem', fmtBRL(r.cotacao_kontrip_hotel_total)) +
           cl('Carro', fmtBRL(r.cotacao_kontrip_carro_valor)) +
           '<div class="cotacao-total">Total: ' + (totKontrip ? fmtBRL(totKontrip) : '—') + '</div>' +
+          (extrairUrlPdf(r.cotacao_kontrip_obs) ? '<a href="' + extrairUrlPdf(r.cotacao_kontrip_obs) + '" target="_blank" style="display:inline-block;margin-top:6px;font-size:12px;color:#0086FF">📄 Ver PDF</a>' : '') +
           '</div>';
       } else {
         body += '<div class="cotacao-box"><div class="cotacao-nome">Kontrip</div>' +
@@ -750,6 +752,11 @@
   }
   function cl(label, value) {
     return '<div class="cotacao-linha"><b>' + label + ':</b> ' + (value || '—') + '</div>';
+  }
+  function extrairUrlPdf(obs) {
+    if (!obs) return null;
+    var m = obs.match(/PDF:\s*(https?:\/\/[^\s|]+)/);
+    return m ? m[1] : null;
   }
 
   function fecharModal() {
