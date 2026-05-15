@@ -188,41 +188,55 @@ function buscarVoosAmadeus(origem, destino, dataIda, dataVolta, adultos, cabine,
         const mktCia  = seg0.marketing_carrier || {};
         const paradas = slice0.segments.length - 1;
 
-        // Bagagem despachada incluída?
+        // Bagagem despachada incluída? — verificação robusta via offer.passengers
         var bagagem = false;
         try {
-          var bags = seg0.passengers[0].baggages || [];
-          bagagem = bags.some(function(b) { return b.type === 'checked' && b.quantity > 0; });
+          bagagem = (offer.passengers || []).some(function(p) {
+            return (p.baggages || []).some(function(b) { return b.type === 'checked' && b.quantity > 0; });
+          });
         } catch(e) {}
+
+        // Escalas: aeroportos intermediários do trecho de ida
+        var escalas = slice0.segments.slice(1).map(function(seg) {
+          return {
+            aeroporto: seg.origin.iata_code,
+            cidade:    (seg.origin.city && seg.origin.city.name) || seg.origin.name || '',
+          };
+        });
 
         var volta = null;
         if (offer.slices[1]) {
-          var sv = offer.slices[1].segments;
+          var sv    = offer.slices[1].segments;
+          var svLast = sv[sv.length - 1];
           volta = {
+            origem:  sv[0].origin.iata_code,
+            destino: svLast.destination.iata_code,
             saida:   sv[0].departing_at,
-            chegada: sv[sv.length - 1].arriving_at,
+            chegada: svLast.arriving_at,
             paradas: sv.length - 1,
+            escalas: sv.slice(1).map(function(s) {
+              return { aeroporto: s.origin.iata_code, cidade: (s.origin.city && s.origin.city.name) || s.origin.name || '' };
+            }),
           };
         }
 
+        // ── BFF limpo — campos financeiros INTENCIONALMENTE OMITIDOS ──
+        // valor, moeda, total_amount, total_currency, taxa, tarifa não são
+        // retornados para o front-end. Preço é responsabilidade da agência.
         return {
-          id:          offer.id,
-          cia_codigo:  cia.iata_code || '',
-          // L2-B: usa CIA_NOMES para nome padronizado; fallback para nome da API
-          cia_nome:    CIA_NOMES[cia.iata_code] || CIA_NOMES[mktCia.iata_code] || cia.name || mktCia.name || '',
-          numero_voo:  (mktCia.iata_code || '') + (seg0.marketing_carrier_flight_number || ''),
-          origem:      seg0.origin.iata_code,
-          destino:     segLast.destination.iata_code,
-          saida:       seg0.departing_at,
-          chegada:     segLast.arriving_at,
-          duracao:     slice0.duration || '',
-          paradas:     paradas,
-          // B6: expor a cabine real da oferta (não hardcoded)
-          classe:      (offer.slices[0].fare_brand_name || (cabine || 'Economy')).toUpperCase(),
-          bagagem:     bagagem,
-          valor:       parseFloat(offer.total_amount),
-          moeda:       offer.total_currency,
-          volta:       volta,
+          id:         offer.id,
+          cia_codigo: cia.iata_code || '',
+          cia_nome:   CIA_NOMES[cia.iata_code] || CIA_NOMES[mktCia.iata_code] || cia.name || mktCia.name || '',
+          numero_voo: (mktCia.iata_code || '') + (seg0.marketing_carrier_flight_number || ''),
+          origem:     seg0.origin.iata_code,
+          destino:    segLast.destination.iata_code,
+          saida:      seg0.departing_at,
+          chegada:    segLast.arriving_at,
+          duracao:    slice0.duration || '',
+          paradas:    paradas,
+          escalas:    escalas,
+          bagagem:    bagagem,
+          volta:      volta,
         };
       } catch(e) {
         Logger.log('[DUFFEL voos] Erro ao mapear oferta: ' + e.message);

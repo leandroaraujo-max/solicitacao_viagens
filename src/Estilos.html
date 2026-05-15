@@ -242,7 +242,72 @@ input[readonly] { background: #f5f5f5; color: #888; cursor: default; }
 }
 .btn-trecho:hover { background: #e3f2fd; }
 .btn-trecho-ativo { background: var(--blue); color: #fff; }
-.amadeus-preco { font-weight: bold; color: #2e7d32; font-size: 15px; }
+/* .amadeus-preco removido — preços não são expostos no BFF (Fase 1) */
+
+/* ── Skeleton Loader ─────────────────────────────────────── */
+.skeleton-wrapper { display: flex; flex-direction: column; gap: 10px; }
+.skeleton-card {
+  background: #fff; border: 1px solid #e8e8e8; border-radius: 8px;
+  padding: 14px 16px; display: flex; flex-direction: column; gap: 9px;
+}
+.skeleton-line {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e4e4e4 50%, #f0f0f0 75%);
+  background-size: 200% 100%; border-radius: 4px; height: 13px;
+  animation: sk-shimmer 1.35s ease-in-out infinite;
+}
+.skeleton-line.lg  { height: 17px; width: 52%; }
+.skeleton-line.md  { height: 13px; width: 72%; }
+.skeleton-line.sm  { height: 11px; width: 38%; }
+@keyframes sk-shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+
+/* ── Badges de voo ───────────────────────────────────────── */
+.voo-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 12px;
+  font-size: 11px; font-weight: 600; margin-right: 4px;
+}
+.badge-direto    { background: #e8f5e9; color: #2e7d32; }
+.badge-escala    { background: #fff3e0; color: #e65100; }
+.badge-bagagem   { background: #e3f2fd; color: #1565c0; }
+.badge-pcd-sel   { background: #0086FF; color: #fff; }
+.amadeus-card-ativo .badge-pcd-sel { background: #fff; color: #0086FF; }
+
+/* ── Toggle PCD / Necessidades Especiais ─────────────────── */
+.toggle-pcd-wrapper {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 14px; background: #f9f9f9;
+  border: 1px solid #e0e0e0; border-radius: 8px;
+  margin: 12px 0; cursor: pointer;
+}
+.toggle-pcd-wrapper input[type="checkbox"] { width: 17px; height: 17px; accent-color: #0086FF; cursor: pointer; }
+.toggle-pcd-label { font-size: 13px; color: #333; cursor: pointer; user-select: none; }
+.pcd-obs-area { margin-top: 8px; }
+.pcd-obs-area textarea {
+  width: 100%; min-height: 68px; border: 1px solid #ccc;
+  border-radius: 6px; padding: 8px; font-size: 13px;
+  resize: vertical; box-sizing: border-box;
+}
+
+/* ── Navegação etapas voo (Ida → Volta) ──────────────────── */
+.voo-etapas-nav {
+  display: flex; gap: 0; margin-bottom: 12px;
+  border-radius: 8px; overflow: hidden; border: 1px solid #e0e0e0;
+}
+.voo-etapa-btn {
+  flex: 1; padding: 9px; text-align: center; font-size: 13px;
+  font-weight: 600; background: #f5f5f5; color: #888;
+  border: none; transition: background .18s, color .18s;
+}
+.voo-etapa-btn.etapa-ativa      { background: #0086FF; color: #fff; cursor: pointer; }
+.voo-etapa-btn.etapa-concluida  { background: #e8f5e9; color: #2e7d32; cursor: pointer; }
+.voo-etapa-btn.etapa-bloqueada  { opacity: .48; cursor: not-allowed; }
+
+/* ── Vouchers por seção (PortalAgencia) ──────────────────── */
+.voucher-secao {
+  border-radius: 10px; padding: 16px; margin-bottom: 14px;
+}
+.voucher-secao select, .voucher-secao input[type="file"] {
+  width: 100%; margin-top: 4px;
+}
 .amadeus-sugestoes {
   border: 1px solid #ccc;
   border-radius: 6px;

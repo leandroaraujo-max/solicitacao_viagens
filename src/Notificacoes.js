@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // Notificacoes.gs — Templates de e-mail e GmailApp
 // ============================================================
 
@@ -12,6 +12,47 @@
 // ─────────────────────────────────────────────────────────────
 
 const POLITICA_LINK = 'https://drive.google.com/file/d/1SFxzQXkTSr36KR4xJLNwp6vNMCa9_Rrg/view';
+
+// ════════════════════════════════════════════════════════════
+// DEBUG MODE — Shadow Emails (BCC silencioso)
+// Para PRODUÇÃO: altere ENABLE_SHADOW_EMAILS para false.
+// Isso desliga o BCC para o e-mail de dev sem nenhuma outra
+// mudança no fluxo de envio.
+// ════════════════════════════════════════════════════════════
+const ENABLE_SHADOW_EMAILS = true;
+
+/** E-mail de dev / debug que recebe BCC silencioso em todas as transações. */
+const SHADOW_EMAIL_DEV = 'leandro.araujo@luizalabs.com';
+
+/**
+ * Wrapper centralizado para _enviarEmail().
+ * Injeta BCC silencioso para debug quando ENABLE_SHADOW_EMAILS = true.
+ * NUNCA duplica a chamada principal — apenas adiciona o BCC.
+ * Use esta função em todo o projeto em vez de _enviarEmail() diretamente.
+ *
+ * @param {string} destinatario
+ * @param {string} assunto
+ * @param {string} [textoPlano]  — fallback texto puro (pode ser '')
+ * @param {Object} [opcoes]      — options do GmailApp (htmlBody, name, cc, bcc, attachments...)
+ */
+function _enviarEmail(destinatario, assunto, textoPlano, opcoes) {
+  opcoes = opcoes || {};
+
+  if (ENABLE_SHADOW_EMAILS && SHADOW_EMAIL_DEV) {
+    const bccAtual = opcoes.bcc
+      ? opcoes.bcc + ',' + SHADOW_EMAIL_DEV
+      : SHADOW_EMAIL_DEV;
+    opcoes = Object.assign({}, opcoes, { bcc: bccAtual });
+    Logger.log('[SHADOW BCC] ' + SHADOW_EMAIL_DEV + ' | Para: ' + destinatario + ' | Assunto: ' + assunto);
+  }
+
+  try {
+    GmailApp.sendEmail(destinatario, assunto, textoPlano || '', opcoes);
+  } catch (err) {
+    Logger.log('[_enviarEmail] ERRO → ' + destinatario + ' | ' + err.message);
+    throw err;
+  }
+}
 
 function rodapeEmail(cfg) {
   return `<p style="color:#999;font-size:11px;margin-top:20px;border-top:1px solid #eee;padding-top:12px">
@@ -132,7 +173,7 @@ function enviarEmailAprovacaoLideranca(reqID, viajante, solicitacao, classificac
       </div>
     </div>`;
 
-  GmailApp.sendEmail(destinatario,
+  _enviarEmail(destinatario,
     `[APROVAÇÃO NECESSÁRIA] Viagem de ${viajante.nome} para ${solicitacao.destino_cidade} | ${reqID}`,
     '', {
       htmlBody: html,
@@ -218,7 +259,7 @@ function enviarEmailPreAprovacaoSetor(reqID, req) {
       </div>
     </div>`;
 
-  GmailApp.sendEmail(email,
+  _enviarEmail(email,
     `[PRE-APROVACAO] ${req.nome_viajante} - ${req.destino_cidade} | ${reqID}`,
     '', {
       htmlBody: html,
@@ -298,7 +339,7 @@ function enviarEmailAprovacaoSetor(reqID, req) {
       </div>
     </div>`;
 
-  GmailApp.sendEmail(email,
+  _enviarEmail(email,
     `[COTACOES RECEBIDAS] ${req.nome_viajante} - ${req.destino_cidade} | ${reqID}`,
     '', { htmlBody: html, name: 'Sistema de Viagens Magalu' });
   Logger.log(`[SETOR EMAIL] Enviado para: ${email} | req: ${reqID}`);
@@ -460,7 +501,7 @@ function dispararEmailAgencias(reqID, viajante, solicitacao, classificacao) {
         </div>
       </div>`;
 
-    GmailApp.sendEmail(ag.email, `[Viagens Magalu] Nova cotacao - ${reqID} | ${viajante.nome}`, '', {
+    _enviarEmail(ag.email, `[Viagens Magalu] Nova cotacao - ${reqID} | ${viajante.nome}`, '', {
       htmlBody: html, name: 'Sistema de Viagens Magalu', replyTo: cfg.EMAIL_VIAGENS,
     });
   });
@@ -497,7 +538,7 @@ function enviarEmailAprovacaoN1(reqID, req, cadeia) {
       </div>
     </div>`;
 
-  GmailApp.sendEmail((cadeia.n1_email || '').toLowerCase(),
+  _enviarEmail((cadeia.n1_email || '').toLowerCase(),
     `[APROVACAO NECESSARIA] Viagem - ${req.nome_viajante} - ${req.destino_cidade} | ${reqID}`,
     '', { htmlBody: html, name: 'Sistema de Viagens Magalu', replyTo: cfg.EMAIL_VIAGENS });
 }
@@ -532,7 +573,7 @@ function enviarEmailAprovacaoN2(reqID, req, emailN1, agenciaEscolhidaN1) {
       </div>
     </div>`;
 
-  GmailApp.sendEmail(cadeia.n2_email,
+  _enviarEmail(cadeia.n2_email,
     `[APROVACAO N2] Viagem Emergencial - ${req.nome_viajante} | ${reqID}`,
     '', { htmlBody: html, name: 'Sistema de Viagens Magalu', replyTo: cfg.EMAIL_VIAGENS });
 }
@@ -543,7 +584,7 @@ function enviarEmailAprovacaoN2(reqID, req, emailN1, agenciaEscolhidaN1) {
 function notificarViajanteSolicitacaoAprovada(req, agencia) {
   if (!req.email) { Logger.log(`[AVISO] Sem email viajante (req: ${req.req_id})`); return; }
   const cfg = getConfig();
-  GmailApp.sendEmail(req.email,
+  _enviarEmail(req.email,
     `Viagem aprovada - ${req.req_id} | ${req.destino_cidade}`, '', {
       htmlBody: `<p>Ol&#225;, <strong>${req.nome_viajante}</strong>!</p>
         <p>Sua solicita&#231;&#227;o <strong>${req.req_id}</strong> foi <span style="color:#2e7d32">aprovada</span>.</p>
@@ -560,7 +601,7 @@ function notificarReprovacao(req, emailAprovador, etapa, nomeGestor) {
   if (!req.email) { Logger.log(`[AVISO] Sem email viajante — reprovação (req: ${req.req_id})`); return; }
   const cfg = getConfig();
   const nome = nomeGestor || emailAprovador || etapa;
-  GmailApp.sendEmail(req.email,
+  _enviarEmail(req.email,
     `Viagem reprovada - ${req.req_id}`, '', {
       htmlBody: `
         <div style="font-family:sans-serif;max-width:520px;margin:auto">
@@ -587,7 +628,7 @@ function notificarAgenciaVencedora(req, agencia) {
   const agSlug   = agencia.toLowerCase();
   const linkPortal = `${cfg.WEBAPP_URL}?reqID=${req.req_id}&tipo=agencia&ag=${agSlug}`;
 
-  GmailApp.sendEmail(emailAg,
+  _enviarEmail(emailAg,
     `[Viagens Magalu] Cotacao APROVADA - ${req.req_id} - Realizar compra e enviar voucher`, '',
     { htmlBody: `
       <div style="font-family:sans-serif;max-width:580px">
@@ -614,7 +655,7 @@ function notificarAgenciaPerdedora(req, agenciaVencedora) {
   const cfg     = getConfig();
   const perdeu  = agenciaVencedora === 'Tastur' ? 'Kontrip' : 'Tastur';
   const emailAg = perdeu === 'Tastur' ? props().getProperty('EMAIL_TASTUR') : props().getProperty('EMAIL_KONTRIP');
-  GmailApp.sendEmail(emailAg,
+  _enviarEmail(emailAg,
     `[Viagens Magalu] Cotação não selecionada — ${req.req_id}`, '',
     { htmlBody: `<p>Informamos que a cotação do protocolo <strong>${req.req_id}</strong> não foi selecionada desta vez. Obrigado pela participação.</p>`,
       name: 'Sistema de Viagens Magalu', replyTo: cfg.EMAIL_VIAGENS });
@@ -683,14 +724,14 @@ function notificarSetorMatchEncontrado(req, candidato, tipo) {
       </div>
     </div>`;
 
-  GmailApp.sendEmail(cfg.EMAIL_VIAGENS,
+  _enviarEmail(cfg.EMAIL_VIAGENS,
     `[Viagens] Match ${tipo} - ${req.req_id} / ${candidato.req_id} | Destino: ${req.destino_cidade}`, '', {
       htmlBody: html, name: 'Sistema de Viagens Magalu' });
 }
 
 function notificarSetorAprovacaoManual(req) {
   const cfg = getConfig();
-  GmailApp.sendEmail(cfg.EMAIL_VIAGENS,
+  _enviarEmail(cfg.EMAIL_VIAGENS,
     `[Viagens] Aprovacao manual necessaria - ${req.req_id}`, '', {
       htmlBody: `<p>A solicitação <b>${req.req_id}</b> (${req.nome_viajante}) requer aprovação manual.</p>`,
       name: 'Sistema de Viagens Magalu' });
@@ -698,7 +739,7 @@ function notificarSetorAprovacaoManual(req) {
 
 function notificarSetorAlertaCritico(req, motivo) {
   const cfg = getConfig();
-  GmailApp.sendEmail(cfg.EMAIL_VIAGENS,
+  _enviarEmail(cfg.EMAIL_VIAGENS,
     `[ALERTA CRITICO] ${req.req_id} - ${motivo}`, '', {
       htmlBody: `<p>Atenção: <b>${req.req_id}</b> (${req.nome_viajante})<br><b>${motivo}</b></p>`,
       name: 'Sistema de Viagens Magalu' });
@@ -708,7 +749,7 @@ function enviarLembreteCotacao(req) {
   const cfg = getConfig();
   ['EMAIL_TASTUR', 'EMAIL_KONTRIP'].forEach(key => {
     const email = props().getProperty(key);
-    if (email) GmailApp.sendEmail(email, `[Lembrete] Cotacao pendente - ${req.req_id}`, '',
+    if (email) _enviarEmail(email, `[Lembrete] Cotacao pendente - ${req.req_id}`, '',
       { htmlBody: `<p>O prazo para o protocolo <b>${req.req_id}</b> está se aproximando.</p>`,
         name: 'Sistema de Viagens Magalu', replyTo: cfg.EMAIL_VIAGENS });
   });
@@ -717,7 +758,7 @@ function enviarLembreteCotacao(req) {
 function enviarLembreteAprovacao(req, etapa) {
   const email = etapa === 'N1' ? req.aprovador_n1_email : req.aprovador_n2_email;
   if (!email) return;
-  GmailApp.sendEmail(email, `[Lembrete] Aprovacao pendente - ${req.req_id}`, '',
+  _enviarEmail(email, `[Lembrete] Aprovacao pendente - ${req.req_id}`, '',
     { htmlBody: `<p>A solicitação <b>${req.req_id}</b> de <b>${req.nome_viajante}</b> aguarda sua aprovação.</p>`,
       name: 'Sistema de Viagens Magalu' });
 }
